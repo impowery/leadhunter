@@ -278,13 +278,17 @@ def parse_telegram_sources():
         print("[Telegram] TG_API_ID/HASH not set — using web fallback")
         return _parse_telegram_web()
 
+    # Bot tokens can't read channel history (restricted by Telegram API)
+    # So skip Telethon entirely if we only have a bot token
+    if TG_BOT_TOKEN:
+        print("[Telegram] Bot token detected — bots can't read channels, using web fallback")
+        return _parse_telegram_web()
+
+    # Only attempt Telethon with user auth (phone + code)
     async def _fetch():
         client = TelegramClient(TG_SESSION, TG_API_ID, TG_API_HASH)
         try:
-            if TG_BOT_TOKEN:
-                await client.start(bot_token=TG_BOT_TOKEN)
-            else:
-                await client.start()
+            await client.start()
         except Exception as e:
             print(f"  [WARN] Telethon auth failed ({e}) — web fallback")
             await client.disconnect()
