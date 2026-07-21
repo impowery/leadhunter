@@ -10,6 +10,11 @@ import asyncio
 from datetime import datetime
 from io import StringIO
 
+try:
+    from dotenv import load_dotenv; load_dotenv()
+except ImportError:
+    pass
+
 import requests
 from openai import OpenAI
 from telethon import TelegramClient
