@@ -6,17 +6,23 @@ import sqlite3
 import argparse
 import time
 import html
+import asyncio
 from datetime import datetime
 from io import StringIO
 
 import requests
 from openai import OpenAI
+from telethon import TelegramClient
 
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 OR_KEY = os.getenv("OPENROUTER_API_KEY")
 
 groq_client = OpenAI(api_key=GROQ_KEY, base_url="https://api.groq.com/openai/v1") if GROQ_KEY else None
 or_client = OpenAI(api_key=OR_KEY, base_url="https://openrouter.ai/api/v1") if OR_KEY else None
+
+TG_API_ID = int(os.getenv("TG_API_ID", "0"))
+TG_API_HASH = os.getenv("TG_API_HASH", "")
+TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunter.session")
 
 KEYWORDS = [
     "n8n", "python", "scraping", "scraper", "automation", "workflow",
@@ -209,32 +215,37 @@ def parse_reddit_forhire():
 
 
 def parse_telegram_sources():
-    print("[Telegram] Fetching Telegram channel pages...")
-    leads = []
-    for ch in TELEGRAM_SOURCES:
-        html_text = fetch_url(ch["url"])
-        if not html_text:
-            continue
-        for match in re.finditer(
-            r'<a[^>]*href="(https://t\.me/s/[^"]+/(\d+))"[^>]*class="tgme_widget_message_text"[^>]*>([\s\S]*?)</a>',
-            html_text
-        ):
-            leads.append({
-                "title": html.unescape(re.sub(r'<[^>]+>', '', match.group(3))).strip()[:120],
-                "url": match.group(1),
-                "source": f"Telegram @{ch['name']}"
-            })
-        fallback_matches = re.findall(
-            r'<span[^>]*dir="auto"[^>]*>([^<]+)</span>',
-            html_text
-        )
-        for i, fm in enumerate(fallback_matches[:10]):
-            leads.append({
-                "title": html.unescape(fm).strip()[:120],
-                "url": f"{ch['url']}/s/{i}",
-                "source": f"Telegram @{ch['name']}"
-            })
-    return leads
+    print("[Telegram] Fetching via Telethon...")
+    if not TG_API_ID or not TG_API_HASH:
+        print("  [WARN] TG_API_ID / TG_API_HASH not set. Skipping Telegram.")
+        return []
+
+    async def _fetch():
+        client = TelegramClient(TG_SESSION, TG_API_ID, TG_API_HASH)
+        await client.start()
+        leads = []
+        for ch in TELEGRAM_SOURCES:
+            try:
+                entity = await client.get_entity(ch["name"])
+                async for msg in client.iter_messages(entity, limit=10):
+                    if msg.text:
+                        text = msg.text.strip()[:200]
+                        leads.append({
+                            "title": text,
+                            "url": f"https://t.me/{ch['name']}/{msg.id}",
+                            "source": f"Telegram @{ch['name']}"
+                        })
+                print(f"  [{ch['name']}] {len([l for l in leads if l['source'] == f'Telegram @{ch[\"name\"]}'])} messages")
+            except Exception as e:
+                print(f"  [WARN] @{ch['name']} failed: {e}")
+        await client.disconnect()
+        return leads
+
+    try:
+        return asyncio.run(_fetch())
+    except Exception as e:
+        print(f"  [WARN] Telethon error: {e}")
+        return []
 
 
 def deduplicate(conn, leads):
