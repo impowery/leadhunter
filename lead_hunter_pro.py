@@ -31,6 +31,7 @@ or_client = OpenAI(api_key=OR_KEY, base_url="https://openrouter.ai/api/v1") if O
 TG_API_ID = int(os.getenv("TG_API_ID", "0"))
 TG_API_HASH = os.getenv("TG_API_HASH", "")
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
+OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "")
 TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunter.session")
 
 KEYWORDS = [
@@ -469,6 +470,51 @@ def print_console(leads):
     print(f"{sep}\n")
 
 
+def send_tg_message(text):
+    if not TG_BOT_TOKEN or not OWNER_CHAT_ID:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
+        requests.post(url, json={
+            "chat_id": OWNER_CHAT_ID,
+            "text": text[:4000],
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }, timeout=10)
+    except Exception as e:
+        print(f"  [WARN] TG send failed: {e}")
+
+
+def send_leads_to_tg(leads):
+    if not leads:
+        return
+    chunks = []
+    msg = f"\U0001F50D <b>Lead Hunter Pro</b> | {len(leads)} new leads\n" + "\u2500" * 30 + "\n"
+    for i, l in enumerate(leads[:10], 1):
+        aspects = ", ".join(l.get("matched_aspects", []))
+        budget = "\U0001F7E2" if l.get("budget_indicated") else "\U0001F534"
+        urgency_map = {"high": "\U0001F534", "medium": "\U0001F7E0", "low": "\U0001F7E1"}
+        urgency_icon = urgency_map.get(l.get("urgency", "low"), "\u26AA")
+        msg += (
+            f"{i}. <b>{l['title'][:80]}</b>\n"
+            f"   \U0001F4CA Score: {l.get('score', 0)}/10 "
+            f"{urgency_icon} {l.get('urgency', 'low').upper()} "
+            f"{budget} Budget\n"
+            f"   \U0001F4AC {l.get('source', '?')}\n"
+            f"   \U0001F517 <a href=\"{l.get('url', '')}\">{l.get('url', '')[:50]}...</a>\n"
+            f"   \U0001F4CC {aspects}\n\n"
+        )
+        if len(msg) > 3500:
+            msg += "\n\U0001F447 Full report in attached files"
+            chunks.append(msg)
+            msg = ""
+    if msg:
+        chunks.append(msg)
+    for c in chunks:
+        send_tg_message(c)
+        time.sleep(0.5)
+
+
 def run():
     print("=" * 47)
     print("  Lead Hunter Pro — scanning for opportunities")
@@ -502,6 +548,7 @@ def run():
 
     if high_scored:
         print_console(high_scored)
+        send_leads_to_tg(high_scored)
         generate_html_report(high_scored)
         generate_csv_report(high_scored)
     else:

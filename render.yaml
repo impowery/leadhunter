@@ -4,7 +4,7 @@ services:
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python lead_hunter_pro.py --loop
-envVarGroups:
+    envVarGroups:
   - name: leadhunter-config
     envVars:
       - key: TG_API_ID
@@ -14,4 +14,6 @@ envVarGroups:
       - key: TG_BOT_TOKEN
         sync: false
       - key: GROQ_API_KEY
+        sync: false
+      - key: OWNER_CHAT_ID
         sync: false
