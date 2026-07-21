@@ -10,6 +10,9 @@ import asyncio
 from datetime import datetime
 from io import StringIO
 
+import sys
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError:
@@ -46,12 +49,12 @@ TELEGRAM_SOURCES = [
     {"name": "freelance_ai", "url": "https://t.me/freelance_ai"},
     {"name": "frelanser", "url": "https://t.me/frelanser"},
     {"name": "upwork_talents", "url": "https://t.me/upwork_talents"},
-    {"name": "remote_jobs_ai", "url": "https://t.me/remote_jobs_ai"},
     {"name": "freelance_llm", "url": "https://t.me/freelance_llm"},
     {"name": "python_jobs", "url": "https://t.me/python_jobs"},
     {"name": "ai_automation_gigs", "url": "https://t.me/ai_automation_gigs"},
     {"name": "n8n_community", "url": "https://t.me/n8n_community"},
     {"name": "workflow_gigs", "url": "https://t.me/workflow_gigs"},
+    {"name": "remote_jobs_ai", "url": "https://t.me/remote_jobs_ai"},
 ]
 
 
@@ -86,7 +89,9 @@ def fetch_url(url, timeout=15):
                 "Chrome/125.0.0.0 Safari/537.36"
             )
         }
-        resp = requests.get(url, headers=headers, timeout=timeout)
+        sess = requests.Session()
+        sess.headers.update(headers)
+        resp = sess.get(url, timeout=timeout)
         resp.raise_for_status()
         return resp.text
     except Exception as e:
@@ -180,29 +185,75 @@ def llm_score(title, description):
 
 
 def parse_hn_jobs():
-    print("[HN] Fetching Hacker News jobs...")
-    html_text = fetch_url("https://news.ycombinator.com/jobs")
-    if not html_text:
+    print("[HN] Searching 'Who is hiring' posts via Algolia API...")
+    import time as _time
+    # Algolia HN Search API — find latest "Who is hiring" post
+    raw = fetch_url(
+        "https://hn.algolia.com/api/v1/search_by_date?"
+        "query=who+is+hiring&tags=story&hitsPerPage=3"
+    )
+    if not raw:
+        print("  [WARN] Algolia API failed, scraping HN front page...")
+        _time.sleep(2)
+        raw = fetch_url("https://news.ycombinator.com/")
+        if raw:
+            leads = []
+            for match in re.finditer(
+                r'<tr class="athing"[^>]*>.*?<span class="titleline"><a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>',
+                raw, re.DOTALL
+            ):
+                url = match.group(1)
+                if url.startswith("item?"):
+                    url = f"https://news.ycombinator.com/{url}"
+                elif url.startswith("/"):
+                    url = f"https://news.ycombinator.com{url}"
+                title = html.unescape(match.group(2)).strip()
+                if any(kw in title.lower() for kw in ["hiring", "job", "remote", "freelance"]):
+                    leads.append({"title": title, "url": url, "source": "Hacker News"})
+            print(f"  {len(leads)} leads (scraped)")
+            return leads
         return []
 
     leads = []
-    for match in re.finditer(
-        r'<tr class="athing"[^>]*>.*?<span class="titleline"><a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>',
-        html_text, re.DOTALL
-    ):
-        url = match.group(1)
-        if url.startswith("item?"):
-            url = f"https://news.ycombinator.com/{url}"
-        elif url.startswith("/"):
-            url = f"https://news.ycombinator.com{url}"
-        title = html.unescape(match.group(2)).strip()
-        leads.append({"title": title, "url": url, "source": "Hacker News"})
+    try:
+        data = json.loads(raw)
+        for hit in data.get("hits", []):
+            title = hit.get("title", "")
+            url = hit.get("url") or hit.get("objectID", "")
+            if not url.startswith("http"):
+                url = f"https://news.ycombinator.com/item?id={url}"
+            if title:
+                leads.append({"title": title, "url": url, "source": "Hacker News"})
+            # Get the top-level comments for each hiring post (these are the actual jobs)
+            _time.sleep(1)
+            item_raw = fetch_url(
+                f"https://hn.algolia.com/api/v1/items/{hit.get('objectID', '')}"
+            )
+            if item_raw:
+                try:
+                    item_data = json.loads(item_raw)
+                    for child in item_data.get("children", []):
+                        comment_text = (child.get("text", "") or "")[:200]
+                        comment_text = re.sub(r'<[^>]+>', '', comment_text).strip()
+                        if comment_text:
+                            leads.append({
+                                "title": comment_text,
+                                "url": f"https://news.ycombinator.com/item?id={child.get('id', '')}",
+                                "source": "Hacker News"
+                            })
+                except: pass
+    except Exception as e:
+        print(f"  [WARN] HN parse error: {e}")
+    print(f"  {len(leads)} leads (API)")
     return leads
 
 
 def parse_reddit_forhire():
     print("[Reddit] Fetching r/forhire...")
     raw = fetch_url("https://www.reddit.com/r/forhire/hot.json")
+    if not raw:
+        print("  [WARN] Reddit unreachable, trying r/freelance...")
+        raw = fetch_url("https://www.reddit.com/r/freelance/hot.json")
     if not raw:
         return []
 
@@ -213,9 +264,11 @@ def parse_reddit_forhire():
             post = child.get("data", {})
             title = post.get("title", "")
             url = post.get("url", "")
-            leads.append({"title": title, "url": url, "source": "Reddit r/forhire"})
+            if title:
+                leads.append({"title": title, "url": url, "source": "Reddit"})
     except Exception as e:
         print(f"  [WARN] Reddit parse error: {e}")
+    print(f"  {len(leads)} leads")
     return leads
 
 
@@ -245,7 +298,8 @@ def parse_telegram_sources():
                             "url": f"https://t.me/{ch['name']}/{msg.id}",
                             "source": f"Telegram @{ch['name']}"
                         })
-                print(f"  [{ch['name']}] {len([l for l in leads if l['source'] == f'Telegram @{ch[\"name\"]}'])} messages")
+                n = sum(1 for l in leads if l.get("source") == f"Telegram @{ch['name']}")
+                print(f"  [{ch['name']}] {n} messages")
             except Exception as e:
                 print(f"  [WARN] @{ch['name']} failed: {e}")
         await client.disconnect()
@@ -264,6 +318,7 @@ def parse_telegram_sources():
 def _parse_telegram_web():
     print("[Telegram] Fetching from public web previews (t.me/s/)...")
     leads = []
+    skip_patterns = re.compile(r'^(Channel (created|photo)|subscribed|\d+:\d+|$)', re.I)
     for ch in TELEGRAM_SOURCES:
         url = f"https://t.me/s/{ch['name']}"
         html_text = fetch_url(url)
@@ -273,13 +328,14 @@ def _parse_telegram_web():
         for block in blocks[1:]:
             text = re.sub(r'<[^>]+>', ' ', block).strip()
             text = html.unescape(text)[:200]
-            if text:
+            if text and not skip_patterns.match(text):
                 leads.append({
                     "title": text,
                     "url": f"https://t.me/{ch['name']}",
                     "source": f"Telegram @{ch['name']}"
                 })
-        print(f"  [{ch['name']}] {len([l for l in leads if l['source'] == f'Telegram @{ch[\"name\"]}'])} msgs (web)")
+        n = sum(1 for l in leads if l.get("source") == f"Telegram @{ch['name']}")
+        print(f"  [{ch['name']}] {n} msgs (web)")
     return leads
 
 
@@ -392,11 +448,11 @@ def print_console(leads):
     dash = "-" * 47
     print(f"\n{sep}")
     for i, l in enumerate(leads, 1):
-        budget_display = "✅" if l.get("budget_indicated") else "❌"
+        budget_display = "YES" if l.get("budget_indicated") else "NO"
         aspects = ", ".join(l.get("matched_aspects", []))
-        print(f"🔴 Lead #{i} | Score: {l.get('score', 0)}/10 | Urgency: {l.get('urgency', 'low')}")
+        print(f"Lead #{i} | Score: {l.get('score', 0)}/10 | Urgency: {l.get('urgency', 'low')}")
         print(dash)
-        print(f"Title:  {l['title']}")
+        print(f"Title:  {l['title'][:80]}")
         print(f"Source: {l.get('source', '?')}")
         print(f"Budget: {budget_display}")
         print(f"Match:  {aspects}")
