@@ -1,6 +1,6 @@
 services:
-  - type: web
-    name: my23agents-bot
+  - type: worker
+    name: leadhunter-pro
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    startCommand: python lead_hunter_pro.py --loop

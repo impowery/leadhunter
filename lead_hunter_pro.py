@@ -215,14 +215,19 @@ def parse_reddit_forhire():
 
 
 def parse_telegram_sources():
-    print("[Telegram] Fetching via Telethon...")
     if not TG_API_ID or not TG_API_HASH:
-        print("  [WARN] TG_API_ID / TG_API_HASH not set. Skipping Telegram.")
-        return []
+        print("[Telegram] TG_API_ID/HASH not set — using web fallback")
+        return _parse_telegram_web()
 
     async def _fetch():
         client = TelegramClient(TG_SESSION, TG_API_ID, TG_API_HASH)
-        await client.start()
+        try:
+            await client.start()
+        except Exception as e:
+            print(f"  [WARN] Telethon auth failed ({e}) — web fallback")
+            await client.disconnect()
+            return None
+
         leads = []
         for ch in TELEGRAM_SOURCES:
             try:
@@ -242,10 +247,35 @@ def parse_telegram_sources():
         return leads
 
     try:
-        return asyncio.run(_fetch())
+        result = asyncio.run(_fetch())
+        if result is None:
+            return _parse_telegram_web()
+        return result
     except Exception as e:
-        print(f"  [WARN] Telethon error: {e}")
-        return []
+        print(f"  [WARN] Telethon error: {e} — web fallback")
+        return _parse_telegram_web()
+
+
+def _parse_telegram_web():
+    print("[Telegram] Fetching from public web previews (t.me/s/)...")
+    leads = []
+    for ch in TELEGRAM_SOURCES:
+        url = f"https://t.me/s/{ch['name']}"
+        html_text = fetch_url(url)
+        if not html_text:
+            continue
+        blocks = re.split(r'<div class="tgme_widget_message_text[^"]*"[^>]*>', html_text)
+        for block in blocks[1:]:
+            text = re.sub(r'<[^>]+>', ' ', block).strip()
+            text = html.unescape(text)[:200]
+            if text:
+                leads.append({
+                    "title": text,
+                    "url": f"https://t.me/{ch['name']}",
+                    "source": f"Telegram @{ch['name']}"
+                })
+        print(f"  [{ch['name']}] {len([l for l in leads if l['source'] == f'Telegram @{ch[\"name\"]}'])} msgs (web)")
+    return leads
 
 
 def deduplicate(conn, leads):
