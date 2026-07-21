@@ -30,6 +30,7 @@ or_client = OpenAI(api_key=OR_KEY, base_url="https://openrouter.ai/api/v1") if O
 
 TG_API_ID = int(os.getenv("TG_API_ID", "0"))
 TG_API_HASH = os.getenv("TG_API_HASH", "")
+TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunter.session")
 
 KEYWORDS = [
@@ -280,7 +281,10 @@ def parse_telegram_sources():
     async def _fetch():
         client = TelegramClient(TG_SESSION, TG_API_ID, TG_API_HASH)
         try:
-            await client.start()
+            if TG_BOT_TOKEN:
+                await client.start(bot_token=TG_BOT_TOKEN)
+            else:
+                await client.start()
         except Exception as e:
             print(f"  [WARN] Telethon auth failed ({e}) — web fallback")
             await client.disconnect()
