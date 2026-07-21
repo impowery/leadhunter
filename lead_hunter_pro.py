@@ -48,15 +48,15 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 TELEGRAM_SOURCES = [
-    {"name": "freelance_ai", "url": "https://t.me/freelance_ai"},
-    {"name": "frelanser", "url": "https://t.me/frelanser"},
-    {"name": "upwork_talents", "url": "https://t.me/upwork_talents"},
-    {"name": "freelance_llm", "url": "https://t.me/freelance_llm"},
-    {"name": "python_jobs", "url": "https://t.me/python_jobs"},
-    {"name": "ai_automation_gigs", "url": "https://t.me/ai_automation_gigs"},
-    {"name": "n8n_community", "url": "https://t.me/n8n_community"},
-    {"name": "workflow_gigs", "url": "https://t.me/workflow_gigs"},
-    {"name": "remote_jobs_ai", "url": "https://t.me/remote_jobs_ai"},
+    {"name": "web3_jobs_crypto_vazima", "url": "https://t.me/web3_jobs_crypto_vazima"},
+    {"name": "jobstash", "url": "https://t.me/jobstash"},
+    {"name": "workingincrypto", "url": "https://t.me/workingincrypto"},
+    {"name": "cryptoheadhunter", "url": "https://t.me/cryptoheadhunter"},
+    {"name": "opento_crypto", "url": "https://t.me/opento_crypto"},
+    {"name": "web30job", "url": "https://t.me/web30job"},
+    {"name": "cryptovakansii", "url": "https://t.me/cryptovakansii"},
+    {"name": "the_workys", "url": "https://t.me/the_workys"},
+    {"name": "xCareers", "url": "https://t.me/xCareers"},
 ]
 
 
