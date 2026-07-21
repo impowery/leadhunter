@@ -137,22 +137,26 @@ def clean_md(text):
     text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
     return text.strip()
 
-API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("GROQ_API_KEY")
+GROQ_KEY = os.getenv("GROQ_API_KEY")
+OR_KEY = os.getenv("OPENROUTER_API_KEY")
 
-client = OpenAI(
-    api_key=API_KEY,
-    base_url="https://openrouter.ai/api/v1"
-)
+groq_client = OpenAI(api_key=GROQ_KEY, base_url="https://api.groq.com/openai/v1") if GROQ_KEY else None
+or_client = OpenAI(api_key=OR_KEY, base_url="https://openrouter.ai/api/v1") if OR_KEY else None
 
 FALLBACK_MODELS = [
-    "deepseek/deepseek-chat",
-    "google/gemini-2.0-flash-001",
-    "meta-llama/llama-3.3-70b-instruct",
+    ("groq", "llama-3.3-70b-versatile"),
+    ("groq", "llama3-70b-8192"),
+    ("groq", "mixtral-8x7b-32768"),
+    ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+    ("openrouter", "google/gemini-2.0-flash-001"),
 ]
 
 def ask_llm(messages, temperature=0.7, timeout=30):
-    """Try models in order, skip on 429"""
-    for model in FALLBACK_MODELS:
+    """Try models: Groq first, then OpenRouter"""
+    for provider, model in FALLBACK_MODELS:
+        client = groq_client if provider == "groq" else or_client
+        if not client:
+            continue
         try:
             response = client.chat.completions.create(
                 model=model,
@@ -162,7 +166,7 @@ def ask_llm(messages, temperature=0.7, timeout=30):
             )
             return response.choices[0].message.content
         except Exception as e:
-            print(f"Model {model} failed: {e}")
+            print(f"[{provider}] {model} failed: {e}")
             continue
     return None
 
