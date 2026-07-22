@@ -691,10 +691,10 @@ def leads_to_tg(leads):
 
 
 def run():
-    print("=" * 47)
-    print("  Lead Hunter Pro — scanning for opportunities")
-    print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 47)
+    print("=" * 47, flush=True)
+    print("  Lead Hunter Pro — scanning for opportunities", flush=True)
+    print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+    print("=" * 47, flush=True)
 
     conn = init_db()
 
@@ -810,14 +810,19 @@ def main():
     t.start()
 
     if args.loop:
-        print("[Scheduler] Starting loop mode (4 hour interval). Press Ctrl+C to stop.")
+        print("[Scheduler] Starting loop mode (4 hour interval).", flush=True)
         try:
             while True:
-                run()
-                print("[Scheduler] Sleeping 4 hours...")
+                try:
+                    run()
+                except Exception as e:
+                    print(f"[ERROR] Run failed: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+                print("[Scheduler] Sleeping 4 hours...", flush=True)
                 time.sleep(14400)
         except KeyboardInterrupt:
-            print("\n[Scheduler] Stopped by user.")
+            print("\n[Scheduler] Stopped by user.", flush=True)
     else:
         run()
 
