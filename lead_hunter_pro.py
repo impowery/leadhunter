@@ -16,6 +16,16 @@ from collections import OrderedDict
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+def extract_json(text):
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    m = re.search(r'\{.*\}', text, re.DOTALL)
+    if m:
+        return json.loads(m.group())
+    raise json.JSONDecodeError("No JSON object found", text, 0)
+
+
 try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError:
@@ -182,7 +192,7 @@ def llm_score(title, description):
 
     for client, model in [
         (groq_client, "llama-3.3-70b-versatile"),
-        (li_client, "glm-5.2"),
+        (li_client, "qwen3.6-27b"),
         (or_client, "meta-llama/llama-3.3-70b-instruct"),
     ]:
         if client is None:
@@ -198,9 +208,7 @@ def llm_score(title, description):
                 max_tokens=100,
             )
             raw = resp.choices[0].message.content.strip()
-            raw = re.sub(r'^```(?:json)?\s*', '', raw)
-            raw = re.sub(r'\s*```$', '', raw)
-            data = json.loads(raw)
+            data = extract_json(raw)
             data.setdefault("score", 0)
             data.setdefault("type", "job")
             data.setdefault("urgency", "low")
