@@ -12,7 +12,14 @@ from datetime import datetime
 from io import StringIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from collections import OrderedDict
-from supabase import create_client, Client
+
+try:
+    from supabase import create_client, Client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+    create_client = None
+    Client = None
 
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -53,7 +60,7 @@ TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunt
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
-supabase: Client | None = None
+supabase = None
 
 KEYWORDS = [
     "n8n", "python", "scraping", "automation", "workflow",
@@ -92,6 +99,9 @@ TELEGRAM_SOURCES = [
 
 
 def init_supabase():
+    if not HAS_SUPABASE:
+        print("[Supabase] Package not installed, skipping")
+        return None
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
         print(f"[Supabase] Connected successfully")
