@@ -15,5 +15,7 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: LIBERTAI_API_KEY
+        sync: false
       - key: OWNER_CHAT_ID
         sync: false
