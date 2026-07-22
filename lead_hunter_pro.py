@@ -277,6 +277,61 @@ def parse_hn_jobs():
     return leads
 
 
+def parse_remoteok():
+    print("[RemoteOK] Fetching...")
+    raw = fetch_url("https://remoteok.com/api?action=get_jobs")
+    if not raw:
+        return []
+    leads = []
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        for job in data[:20] if isinstance(data, list) else []:
+            title = job.get("position", "")
+            url = job.get("url", "")
+            if title:
+                leads.append({"title": title, "url": url, "source": "RemoteOK"})
+    except Exception as e:
+        print(f"  [WARN] RemoteOK error: {e}")
+    print(f"  {len(leads)} leads")
+    return leads
+
+
+def parse_remote_co():
+    print("[Remote.co] Fetching...")
+    import time as _time
+    html_text = fetch_url("https://remote.co/remote-jobs/")
+    if not html_text:
+        return []
+    leads = []
+    for match in re.finditer(
+        r'<a[^>]*href="(/remote-jobs/[^"]+)"[^>]*>([^<]+)</a>',
+        html_text
+    ):
+        url = "https://remote.co" + match.group(1) if match.group(1).startswith("/") else match.group(1)
+        title = html.unescape(match.group(2)).strip()
+        if title and "remote" in title.lower():
+            leads.append({"title": title, "url": url, "source": "Remote.co"})
+        if len(leads) >= 15:
+            break
+    print(f"  {len(leads)} leads")
+    return leads
+
+
+def parse_wwr():
+    print("[WeWorkRemotely] Fetching...")
+    html_text = fetch_url("https://weworkremotely.com")
+    if not html_text:
+        return []
+    leads = []
+    for match in re.finditer(
+        r'<a[^>]*href="(https://weworkremotely\.com/remote-jobs/[^"]+)"[^>]*>\s*<span[^>]*class="title"[^>]*>([^<]+)</span>',
+        html_text, re.DOTALL
+    ):
+        leads.append({"title": html.unescape(match.group(2)).strip(), "url": match.group(1), "source": "WeWorkRemotely"})
+    print(f"  {len(leads)} leads")
+    return leads
+
+
 def parse_reddit_forhire():
     print("[Reddit] Fetching r/forhire...")
     raw = fetch_url("https://www.reddit.com/r/forhire/hot.json")
@@ -542,13 +597,12 @@ def leads_to_tg(leads):
         for i, l in enumerate(group[:5], 1):
             title = l["title"][:70].replace("#", "")
             aspects = clean_aspects(l.get("matched_aspects", []))
-            budget = "\U00002705" if l.get("budget_indicated") else "\U0000274C"
             urgency_icon = {"high": "\U0001F534", "medium": "\U0001F7E1", "low": "\U0001F7E2"}
             urg = urgency_icon.get(l.get("urgency", "low"), "\u26AA")
             score = l.get("score", 0)
             msg += (
                 f"  {i}. {title}\n"
-                f"     \U0001F4CA {score}/10 {urg} {l.get('urgency', 'low').upper()} | {budget} budget\n"
+                f"     \U0001F4CA {score}/10 {urg} {l.get('urgency', 'low').upper()}\n"
             )
             if aspects:
                 msg += f"     \U0001F3F7 {aspects}\n"
@@ -579,6 +633,9 @@ def run():
     all_raw.extend(parse_hn_jobs())
     all_raw.extend(parse_reddit_forhire())
     all_raw.extend(parse_telegram_sources())
+    all_raw.extend(parse_remoteok())
+    all_raw.extend(parse_remote_co())
+    all_raw.extend(parse_wwr())
 
     print(f"\n[Raw] Total leads collected: {len(all_raw)}")
 
