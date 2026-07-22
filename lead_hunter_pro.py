@@ -100,6 +100,7 @@ def init_db():
             budget TEXT,
             matched_aspects TEXT,
             reason TEXT,
+            sent INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
@@ -674,17 +675,23 @@ def run():
     if os.path.exists(sent_file):
         sent_hashes.update(open(sent_file, encoding="utf-8").read().splitlines())
 
+    # Also read sent URLs from DB to catch past sends within same deploy
+    c2 = conn.cursor()
+    sent_urls = set()
+    for row in c2.execute("SELECT url FROM leads WHERE sent=1"):
+        sent_urls.add(row[0])
+
     high_scored = [l for l in new_leads if l.get("score", 0) >= 6]
     # Hard filter: remove Senior/Lead/Director/VP titles
     senior_pattern = re.compile(r"\b(senior|sr\.?|lead|principal|staff|director|vp\b|vice president|head of)", re.I)
     high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
     # Remove resumes (#Резюме / resumes)
     high_scored = [l for l in high_scored if not re.search(r"#Резюме|#resume|резюме", l["title"], re.I)]
-    # Deduplicate: skip if hash already in sent_hashes
+    # Deduplicate: skip if hash already in sent_hashes OR url already sent
     unique = []
     for l in high_scored:
         h = str(hash(l["title"][:60] + l.get("source", "")))
-        if h not in sent_hashes:
+        if h not in sent_hashes and l.get("url") not in sent_urls:
             sent_hashes.add(h)
             unique.append(l)
     high_scored = unique
@@ -699,6 +706,10 @@ def run():
             for l in high_scored:
                 h = str(hash(l["title"][:60] + l.get("source", "")))
                 f.write(h + "\n")
+        # Mark as sent in DB too
+        for l in high_scored:
+            c2.execute("UPDATE leads SET sent=1 WHERE url=?", (l.get("url"),))
+        conn.commit()
         generate_html_report(high_scored)
         generate_csv_report(high_scored)
     else:
