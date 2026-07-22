@@ -517,9 +517,9 @@ def store_leads(conn, results):
             print(f"  [WARN] store failed: {e}")
     conn.commit()
 
-    # Also upsert to Supabase if available
+    # Also upsert to Supabase if available (only new leads, don't overwrite sent=True)
     if supabase is not None:
-        for r in results:
+        for r in new_leads:
             try:
                 supabase.table("leads").upsert({
                     "title": r["title"],
