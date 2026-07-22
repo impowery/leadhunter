@@ -243,6 +243,7 @@ def llm_score(title, description):
                 ],
                 temperature=0.1,
                 max_tokens=100,
+                timeout=15,
             )
             raw = resp.choices[0].message.content.strip()
             data = extract_json(raw)
