@@ -604,6 +604,8 @@ def leads_to_tg(leads):
                 f"  {i}. <b>{title}</b>\n"
                 f"     \U0001F4CA {score}/10 {urg} {l.get('urgency', 'low').upper()}\n"
             )
+            if l.get("url"):
+                msg += f"     \U0001F517 <a href=\"{l.get('url')}\">{short_url(l.get('url'))}</a>\n"
             if aspects:
                 msg += f"     \U0001F3F7 {aspects}\n"
         if len(group) > 5:
