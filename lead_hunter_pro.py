@@ -12,6 +12,7 @@ from datetime import datetime
 from io import StringIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from collections import OrderedDict
+from supabase import create_client, Client
 
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -49,6 +50,11 @@ TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "")
 TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunter.session")
 
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
+supabase: Client | None = None
+
 KEYWORDS = [
     "n8n", "python", "scraping", "automation", "workflow",
     "freelance", "remote", "contract", "bot", "api",
@@ -85,6 +91,16 @@ TELEGRAM_SOURCES = [
 ]
 
 
+def init_supabase():
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print(f"[Supabase] Connected successfully")
+        return client
+    except Exception as e:
+        print(f"[Supabase] Connection failed: {e}")
+        return None
+
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -105,6 +121,11 @@ def init_db():
         )
     """)
     conn.commit()
+
+    global supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        supabase = init_supabase()
+
     return conn
 
 
@@ -480,6 +501,25 @@ def store_leads(conn, results):
         except Exception as e:
             print(f"  [WARN] store failed: {e}")
     conn.commit()
+
+    # Also upsert to Supabase if available
+    if supabase is not None:
+        for r in results:
+            try:
+                supabase.table("leads").upsert({
+                    "title": r["title"],
+                    "source": r["source"],
+                    "url": r["url"],
+                    "score": r.get("score", 0),
+                    "type": r.get("type", "job"),
+                    "urgency": r.get("urgency", "low"),
+                    "budget": json.dumps(r.get("budget_indicated", False)),
+                    "matched_aspects": json.dumps(r.get("matched_aspects", [])),
+                    "reason": r.get("reason", ""),
+                }, on_conflict="url").execute()
+            except Exception as e:
+                print(f"  [WARN] Supabase upsert failed: {e}")
+
     print(f"[DB] New leads stored: {len(new_leads)}")
     return new_leads
 
@@ -671,15 +711,28 @@ def run():
 
     # Persistent dedup: skip leads already sent in previous runs
     sent_file = os.path.join(DATA_DIR, "sent_hashes.txt")
+
+    # Check Supabase FIRST for already-sent URLs (persists across redeploys)
+    supabase_sent_urls = set()
+    if supabase is not None:
+        try:
+            resp = supabase.table("leads").select("url").eq("sent", True).execute()
+            supabase_sent_urls = {row["url"] for row in resp.data}
+        except Exception as e:
+            print(f"  [WARN] Supabase dedup query failed: {e}")
+
     sent_hashes = set()
     if os.path.exists(sent_file):
         sent_hashes.update(open(sent_file, encoding="utf-8").read().splitlines())
 
-    # Also read sent URLs from DB to catch past sends within same deploy
+    # Also read sent URLs from local DB to catch past sends within same deploy
     c2 = conn.cursor()
     sent_urls = set()
     for row in c2.execute("SELECT url FROM leads WHERE sent=1"):
         sent_urls.add(row[0])
+
+    # Merge Supabase sent URLs with local sent URLs
+    sent_urls.update(supabase_sent_urls)
 
     high_scored = [l for l in new_leads if l.get("score", 0) >= 6]
     # Hard filter: remove Senior/Lead/Director/VP titles
@@ -706,10 +759,20 @@ def run():
             for l in high_scored:
                 h = str(hash(l["title"][:60] + l.get("source", "")))
                 f.write(h + "\n")
-        # Mark as sent in DB too
+        # Mark as sent in local DB
         for l in high_scored:
             c2.execute("UPDATE leads SET sent=1 WHERE url=?", (l.get("url"),))
         conn.commit()
+        # Also mark as sent in Supabase
+        if supabase is not None:
+            for l in high_scored:
+                try:
+                    supabase.table("leads").upsert({
+                        "url": l.get("url"),
+                        "sent": True,
+                    }, on_conflict="url").execute()
+                except Exception as e:
+                    print(f"  [WARN] Supabase mark sent failed: {e}")
         generate_html_report(high_scored)
         generate_csv_report(high_scored)
     else:
