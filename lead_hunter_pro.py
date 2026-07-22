@@ -418,14 +418,18 @@ def _parse_telegram_web():
         html_text = fetch_url(url)
         if not html_text:
             continue
-        blocks = re.split(r'<div class="tgme_widget_message_text[^"]*"[^>]*>', html_text)
-        for block in blocks[1:]:
+        # Each message has a unique anchor: <a href="https://t.me/channel/123">
+        msg_links = re.findall(r'<a[^>]*href="(https://t\.me/[^"]+/\d+)"[^>]*class="tgme_widget_message_date"[^>]*>', html_text)
+        msg_texts = re.split(r'<div class="tgme_widget_message_text[^"]*"[^>]*>', html_text)
+        # msg_texts[0] is before first message, msg_texts[1:] correspond to each message
+        for idx, block in enumerate(msg_texts[1:]):
             text = re.sub(r'<[^>]+>', ' ', block).strip()
             text = html.unescape(text)[:200]
             if text and not skip_patterns.match(text):
+                msg_url = msg_links[idx] if idx < len(msg_links) else f"https://t.me/{ch['name']}"
                 leads.append({
                     "title": text,
-                    "url": f"https://t.me/{ch['name']}",
+                    "url": msg_url,
                     "source": f"Telegram @{ch['name']}"
                 })
         n = sum(1 for l in leads if l.get("source") == f"Telegram @{ch['name']}")
@@ -656,19 +660,24 @@ def run():
 
     new_leads = store_leads(conn, scored)
 
+    # Persistent dedup: skip leads already sent in previous runs
+    sent_file = os.path.join(DATA_DIR, "sent_hashes.txt")
+    sent_hashes = set()
+    if os.path.exists(sent_file):
+        sent_hashes.update(open(sent_file, encoding="utf-8").read().splitlines())
+
     high_scored = [l for l in new_leads if l.get("score", 0) >= 6]
     # Hard filter: remove Senior/Lead/Director/VP titles
     senior_pattern = re.compile(r"\b(senior|sr\.?|lead|principal|staff|director|vp\b|vice president|head of)", re.I)
     high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
     # Remove resumes (#Резюме / resumes)
     high_scored = [l for l in high_scored if not re.search(r"#Резюме|#resume|резюме", l["title"], re.I)]
-    # Deduplicate: same title from same source
-    seen = set()
+    # Deduplicate: skip if hash already in sent_hashes
     unique = []
     for l in high_scored:
-        key = (l["title"][:50], l.get("source", ""))
-        if key not in seen:
-            seen.add(key)
+        h = str(hash(l["title"][:60] + l.get("source", "")))
+        if h not in sent_hashes:
+            sent_hashes.add(h)
             unique.append(l)
     high_scored = unique
     high_scored.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -677,6 +686,11 @@ def run():
     if high_scored:
         print_console(high_scored)
         leads_to_tg(high_scored)
+        # Save hashes of sent leads to avoid re-sending after redeploy
+        with open(sent_file, "a", encoding="utf-8") as f:
+            for l in high_scored:
+                h = str(hash(l["title"][:60] + l.get("source", "")))
+                f.write(h + "\n")
         generate_html_report(high_scored)
         generate_csv_report(high_scored)
     else:
