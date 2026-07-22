@@ -790,10 +790,7 @@ def run():
         if supabase is not None:
             for l in high_scored:
                 try:
-                    supabase.table("leads").upsert({
-                        "url": l.get("url"),
-                        "sent": True,
-                    }, on_conflict="url").execute()
+                    supabase.table("leads").update({"sent": True}).eq("url", l.get("url")).execute()
                 except Exception as e:
                     print(f"  [WARN] Supabase mark sent failed: {e}")
         generate_html_report(high_scored)
