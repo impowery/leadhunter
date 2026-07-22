@@ -11,6 +11,7 @@ import threading
 from datetime import datetime
 from io import StringIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from collections import OrderedDict
 
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -511,31 +512,56 @@ def send_tg_message(text):
         print(f"  [WARN] TG send failed: {e}")
 
 
-def send_leads_to_tg(leads):
+def leads_to_tg(leads):
     if not leads:
         return
+
+    # Clean aspects: remove # from hashtags
+    def clean_aspects(aspects):
+        return ", ".join(a.lstrip("#").strip() for a in aspects if a.strip())
+
+    def short_url(url):
+        u = url.replace("https://", "").replace("http://", "")
+        return u[:50] + ".." if len(u) > 50 else u
+
+    # Group by source
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for l in leads:
+        src = l.get("source", "Other")
+        if src not in groups:
+            groups[src] = []
+        groups[src].append(l)
+
     chunks = []
-    msg = f"\U0001F50D <b>Lead Hunter Pro</b> | {len(leads)} new leads\n" + "\u2500" * 30 + "\n"
-    for i, l in enumerate(leads[:10], 1):
-        aspects = ", ".join(l.get("matched_aspects", []))
-        budget = "\U0001F7E2" if l.get("budget_indicated") else "\U0001F534"
-        urgency_map = {"high": "\U0001F534", "medium": "\U0001F7E0", "low": "\U0001F7E1"}
-        urgency_icon = urgency_map.get(l.get("urgency", "low"), "\u26AA")
-        msg += (
-            f"{i}. <b>{l['title'][:80]}</b>\n"
-            f"   \U0001F4CA Score: {l.get('score', 0)}/10 "
-            f"{urgency_icon} {l.get('urgency', 'low').upper()} "
-            f"{budget} Budget\n"
-            f"   \U0001F4AC {l.get('source', '?')}\n"
-            f"   \U0001F517 <a href=\"{l.get('url', '')}\">{l.get('url', '')[:50]}...</a>\n"
-            f"   \U0001F4CC {aspects}\n\n"
-        )
+    total = len(leads)
+    msg = f"\U0001F50E New leads: {total}\n" + "\u2500" * 25 + "\n"
+
+    for src, group in groups.items():
+        msg += f"\n\U0001F4E1 {src} ({len(group)})\n"
+        for i, l in enumerate(group[:5], 1):
+            title = l["title"][:70].replace("#", "")
+            aspects = clean_aspects(l.get("matched_aspects", []))
+            budget = "\U00002705" if l.get("budget_indicated") else "\U0000274C"
+            urgency_icon = {"high": "\U0001F534", "medium": "\U0001F7E1", "low": "\U0001F7E2"}
+            urg = urgency_icon.get(l.get("urgency", "low"), "\u26AA")
+            score = l.get("score", 0)
+            msg += (
+                f"  {i}. {title}\n"
+                f"     \U0001F4CA {score}/10 {urg} {l.get('urgency', 'low').upper()} | {budget} budget\n"
+            )
+            if aspects:
+                msg += f"     \U0001F3F7 {aspects}\n"
+        if len(group) > 5:
+            msg += f"     ... +{len(group)-5} more from {src}\n"
+
         if len(msg) > 3500:
-            msg += "\n\U0001F447 Full report in attached files"
             chunks.append(msg)
             msg = ""
+
     if msg:
         chunks.append(msg)
+
     for c in chunks:
         send_tg_message(c)
         time.sleep(0.5)
@@ -572,12 +598,23 @@ def run():
     # Hard filter: remove Senior/Lead/Director/VP titles
     senior_pattern = re.compile(r"\b(senior|sr\.?|lead|principal|staff|director|vp\b|vice president|head of)", re.I)
     high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
+    # Remove resumes (#Резюме / resumes)
+    high_scored = [l for l in high_scored if not re.search(r"#Резюме|#resume|резюме", l["title"], re.I)]
+    # Deduplicate: same title from same source
+    seen = set()
+    unique = []
+    for l in high_scored:
+        key = (l["title"][:50], l.get("source", ""))
+        if key not in seen:
+            seen.add(key)
+            unique.append(l)
+    high_scored = unique
     high_scored.sort(key=lambda x: x.get("score", 0), reverse=True)
     print(f"[Filter] High-scoring leads (>=6): {len(high_scored)}")
 
     if high_scored:
         print_console(high_scored)
-        send_leads_to_tg(high_scored)
+        leads_to_tg(high_scored)
         generate_html_report(high_scored)
         generate_csv_report(high_scored)
     else:
