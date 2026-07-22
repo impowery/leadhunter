@@ -683,7 +683,7 @@ def run():
 
 def main():
     parser = argparse.ArgumentParser(description="Lead Hunter Pro")
-    parser.add_argument("--loop", action="store_true", help="Run continuously every 30 min")
+    parser.add_argument("--loop", action="store_true", help="Run continuously every 4 hours")
     args = parser.parse_args()
 
     # Health check server for Render (worker health check)
@@ -699,12 +699,12 @@ def main():
     t.start()
 
     if args.loop:
-        print("[Scheduler] Starting loop mode (30 min interval). Press Ctrl+C to stop.")
+        print("[Scheduler] Starting loop mode (4 hour interval). Press Ctrl+C to stop.")
         try:
             while True:
                 run()
-                print("[Scheduler] Sleeping 30 minutes...")
-                time.sleep(1800)
+                print("[Scheduler] Sleeping 4 hours...")
+                time.sleep(14400)
         except KeyboardInterrupt:
             print("\n[Scheduler] Stopped by user.")
     else:
