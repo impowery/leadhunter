@@ -100,15 +100,20 @@ TELEGRAM_SOURCES = [
 
 def init_supabase():
     if not HAS_SUPABASE:
-        print("[Supabase] Package not installed, skipping")
+        print("[Supabase] Package not installed, skipping", flush=True)
         return None
+    import socket
+    old_to = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(10)
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print(f"[Supabase] Connected successfully")
+        print(f"[Supabase] Connected successfully", flush=True)
         return client
     except Exception as e:
-        print(f"[Supabase] Connection failed: {e}")
+        print(f"[Supabase] Connection failed: {e}", flush=True)
         return None
+    finally:
+        socket.setdefaulttimeout(old_to)
 
 
 def init_db():
@@ -696,17 +701,25 @@ def run():
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
     print("=" * 47, flush=True)
 
+    print("[DBG] init_db...", flush=True)
     conn = init_db()
+    print("[DBG] DB ready", flush=True)
 
     all_raw = []
+    print("[DBG] parse_hn_jobs...", flush=True)
     all_raw.extend(parse_hn_jobs())
+    print("[DBG] parse_reddit...", flush=True)
     all_raw.extend(parse_reddit_forhire())
+    print("[DBG] parse_telegram...", flush=True)
     all_raw.extend(parse_telegram_sources())
+    print("[DBG] parse_remoteok...", flush=True)
     all_raw.extend(parse_remoteok())
+    print("[DBG] parse_remote_co...", flush=True)
     all_raw.extend(parse_remote_co())
+    print("[DBG] parse_wwr...", flush=True)
     all_raw.extend(parse_wwr())
 
-    print(f"\n[Raw] Total leads collected: {len(all_raw)}")
+    print(f"[Raw] Total leads collected: {len(all_raw)}", flush=True)
 
     scored = []
     for i, lead in enumerate(all_raw):
