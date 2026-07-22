@@ -724,11 +724,15 @@ def run():
 
     scored = []
     for i, lead in enumerate(all_raw):
-        print(f"  Scoring [{i+1}/{len(all_raw)}]: {lead['title'][:60]}...")
-        result = llm_score(lead["title"], lead["title"])
-        result["title"] = lead["title"]
-        result["url"] = lead["url"]
-        result["source"] = lead["source"]
+        if not isinstance(lead, dict) or not lead.get("title"):
+            print(f"  [WARN] Skipping invalid lead #{i}: {lead}", flush=True)
+            continue
+        title = lead["title"][:200]
+        print(f"  Scoring [{i+1}/{len(all_raw)}]: {title[:60]}...", flush=True)
+        result = llm_score(title, title)
+        result["title"] = title
+        result["url"] = lead.get("url", "")
+        result["source"] = lead.get("source", "?")
         scored.append(result)
 
     new_leads = store_leads(conn, scored)
