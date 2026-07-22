@@ -7,8 +7,10 @@ import argparse
 import time
 import html
 import asyncio
+import threading
 from datetime import datetime
 from io import StringIO
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -35,12 +37,17 @@ OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "")
 TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunter.session")
 
 KEYWORDS = [
-    "n8n", "python", "scraping", "scraper", "automation", "workflow",
-    "freelance", "remote", "contract", "bot", "API", "api",
-    "chatbot", "llm", "ai agent", "gpt", "telegram bot",
+    "n8n", "python", "scraping", "automation", "workflow",
+    "freelance", "remote", "contract", "bot", "api",
+    "chatbot", "llm", "ai", "gpt", "telegram bot",
     "founding engineer", "consultant", "integration", "webhook",
-    "zapier", "make", "low-code", "no-code", "RPA", "selenium",
-    "beautifulsoup", "crawler", "parser", "data extraction"
+    "zapier", "make", "low-code", "no-code", "selenium",
+    "developer", "backend", "frontend", "fullstack", "engineer",
+    "blockchain", "web3", "crypto", "solana", "rust",
+    "fintech", "defi", "smart contract", "solidity",
+    "devops", "data", "analyst", "machine learning",
+    "CEO", "CTO", "co-founder", "startup",
+    "удаленка", "вакансия", "part-time",
 ]
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "leads.db")
@@ -107,7 +114,7 @@ def keyword_score(text):
     for kw in KEYWORDS:
         if kw.lower() in text_lower:
             matched.append(kw)
-    score = min(round(len(matched) * 1.2, 1), 10)
+    score = min(round(len(matched) * 1.5, 1), 10)
 
     urgency = "low"
     urgent_words = ["urgent", "asap", "immediately", "today", "deadline"]
@@ -136,6 +143,12 @@ def keyword_score(text):
 
 def llm_score(title, description):
     text = f"Title: {title}\nDescription: {description}"
+
+    # Pre-filter: use keyword score for obvious cases to save LLM tokens
+    kw = keyword_score(text)
+    if kw["score"] < 2 or kw["score"] > 6:
+        return kw
+
     system_prompt = (
         "You are an expert in AI automation (n8n, Python, scraping, LLM, "
         "workflow automation, chatbots). Your task is to score a lead for "
@@ -165,7 +178,7 @@ def llm_score(title, description):
                     {"role": "user", "content": text},
                 ],
                 temperature=0.1,
-                max_tokens=300,
+                max_tokens=100,
             )
             raw = resp.choices[0].message.content.strip()
             raw = re.sub(r'^```(?:json)?\s*', '', raw)
@@ -562,6 +575,18 @@ def main():
     parser = argparse.ArgumentParser(description="Lead Hunter Pro")
     parser.add_argument("--loop", action="store_true", help="Run continuously every 30 min")
     args = parser.parse_args()
+
+    # Health check server for Render (worker health check)
+    def health_server():
+        class H(BaseHTTPRequestHandler):
+            def do_GET(s):
+                s.send_response(200)
+                s.end_headers()
+                s.wfile.write(b"ok")
+            def log_message(s, *a): pass
+        HTTPServer(("0.0.0.0", 10000), H).serve_forever()
+    t = threading.Thread(target=health_server, daemon=True)
+    t.start()
 
     if args.loop:
         print("[Scheduler] Starting loop mode (30 min interval). Press Ctrl+C to stop.")
