@@ -3,7 +3,7 @@ services:
     name: leadhunter-pro
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python lead_hunter_pro.py --loop
+    startCommand: python -u lead_hunter_pro.py --loop
     envVarGroups:
   - name: leadhunter-config
     envVars:
@@ -18,4 +18,8 @@ services:
       - key: LIBERTAI_API_KEY
         sync: false
       - key: OWNER_CHAT_ID
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
         sync: false
