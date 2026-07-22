@@ -58,7 +58,10 @@ def _sb(path, method="GET", data=None, params=None):
     """Raw Supabase REST API call. Returns parsed JSON or None."""
     if not HAS_SUPABASE:
         return None
-    url = f"{SUPABASE_URL}/rest/v1/{path}"
+    base = SUPABASE_URL.rstrip("/")
+    if not base.endswith("/rest/v1"):
+        base += "/rest/v1"
+    url = f"{base}/{path}"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
