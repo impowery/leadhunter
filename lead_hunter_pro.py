@@ -50,6 +50,11 @@ KEYWORDS = [
     "удаленка", "вакансия", "part-time",
 ]
 
+EXCLUDE = [
+    "senior", "sr.", "lead", "principal", "staff", "head of",
+    "director", "vp", "vice president", "manager",
+]
+
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "leads.db")
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -114,7 +119,14 @@ def keyword_score(text):
     for kw in KEYWORDS:
         if kw.lower() in text_lower:
             matched.append(kw)
+
+    # Penalize senior/lead/director positions
+    excluded = [ex for ex in EXCLUDE if ex.lower() in text_lower]
+
     score = min(round(len(matched) * 1.5, 1), 10)
+    for ex in excluded:
+        score -= 2
+    score = max(0.0, score)
 
     urgency = "low"
     urgent_words = ["urgent", "asap", "immediately", "today", "deadline"]
@@ -161,6 +173,7 @@ def llm_score(title, description):
         "- budget_indicated: true/false\n"
         "- matched_aspects: list of strings (what makes this relevant)\n"
         "- reason: string explaining the score\n\n"
+        "IMPORTANT: If the title says Senior, Lead, Principal, Director, VP, or Head Of — set score to 0 (we want junior/mid-level).\n"
         "Use 0 for score if the lead is not relevant at all."
     )
 
@@ -556,6 +569,9 @@ def run():
     print(f"[DB] New leads stored: {new_count}")
 
     high_scored = [l for l in scored if l.get("score", 0) >= 6]
+    # Hard filter: remove Senior/Lead/Director/VP titles
+    senior_pattern = re.compile(r"\b(senior|sr\.?|lead|principal|staff|director|vp\b|vice president|head of)", re.I)
+    high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
     high_scored.sort(key=lambda x: x.get("score", 0), reverse=True)
     print(f"[Filter] High-scoring leads (>=6): {len(high_scored)}")
 
