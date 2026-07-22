@@ -440,7 +440,7 @@ def deduplicate(conn, leads):
 
 def store_leads(conn, results):
     c = conn.cursor()
-    count = 0
+    new_leads = []
     for r in results:
         try:
             c.execute(
@@ -460,11 +460,12 @@ def store_leads(conn, results):
                 )
             )
             if c.rowcount:
-                count += 1
+                new_leads.append(r)
         except Exception as e:
             print(f"  [WARN] store failed: {e}")
     conn.commit()
-    return count
+    print(f"[DB] New leads stored: {len(new_leads)}")
+    return new_leads
 
 
 def generate_html_report(leads):
@@ -650,10 +651,9 @@ def run():
         result["source"] = lead["source"]
         scored.append(result)
 
-    new_count = store_leads(conn, scored)
-    print(f"[DB] New leads stored: {new_count}")
+    new_leads = store_leads(conn, scored)
 
-    high_scored = [l for l in scored if l.get("score", 0) >= 6]
+    high_scored = [l for l in new_leads if l.get("score", 0) >= 6]
     # Hard filter: remove Senior/Lead/Director/VP titles
     senior_pattern = re.compile(r"\b(senior|sr\.?|lead|principal|staff|director|vp\b|vice president|head of)", re.I)
     high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
