@@ -13,14 +13,6 @@ from io import StringIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from collections import OrderedDict
 
-try:
-    from supabase import create_client, Client
-    HAS_SUPABASE = True
-except ImportError:
-    HAS_SUPABASE = False
-    create_client = None
-    Client = None
-
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -57,10 +49,31 @@ TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "")
 TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunter.session")
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
-supabase = None
+HAS_SUPABASE = bool(SUPABASE_URL and SUPABASE_KEY)
+
+def _sb(path, method="GET", data=None, params=None):
+    """Raw Supabase REST API call. Returns parsed JSON or None."""
+    if not HAS_SUPABASE:
+        return None
+    url = f"{SUPABASE_URL}/rest/v1/{path}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+    try:
+        r = requests.request(method, url, headers=headers, json=data, params=params, timeout=10)
+        r.raise_for_status()
+        if r.text.strip():
+            return r.json()
+        return []
+    except Exception as e:
+        print(f"  [WARN] Supabase API error ({method} {path}): {e}", flush=True)
+        return None
 
 KEYWORDS = [
     "n8n", "python", "scraping", "automation", "workflow",
@@ -98,24 +111,6 @@ TELEGRAM_SOURCES = [
 ]
 
 
-def init_supabase():
-    if not HAS_SUPABASE:
-        print("[Supabase] Package not installed, skipping", flush=True)
-        return None
-    import socket
-    old_to = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(10)
-    try:
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print(f"[Supabase] Connected successfully", flush=True)
-        return client
-    except Exception as e:
-        print(f"[Supabase] Connection failed: {e}", flush=True)
-        return None
-    finally:
-        socket.setdefaulttimeout(old_to)
-
-
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -137,9 +132,8 @@ def init_db():
     """)
     conn.commit()
 
-    global supabase
-    if SUPABASE_URL and SUPABASE_KEY:
-        supabase = init_supabase()
+    if HAS_SUPABASE:
+        print("[Supabase] Using REST API", flush=True)
 
     return conn
 
@@ -519,10 +513,10 @@ def store_leads(conn, results):
     conn.commit()
 
     # Also upsert to Supabase if available (only new leads, don't overwrite sent=True)
-    if supabase is not None:
+    if HAS_SUPABASE:
         for r in new_leads:
             try:
-                supabase.table("leads").upsert({
+                _sb("leads", "POST", {
                     "title": r["title"],
                     "source": r["source"],
                     "url": r["url"],
@@ -532,9 +526,9 @@ def store_leads(conn, results):
                     "budget": json.dumps(r.get("budget_indicated", False)),
                     "matched_aspects": json.dumps(r.get("matched_aspects", [])),
                     "reason": r.get("reason", ""),
-                }, on_conflict="url").execute()
+                }, params={"on_conflict": "url"})
             except Exception as e:
-                print(f"  [WARN] Supabase upsert failed: {e}")
+                print(f"  [WARN] Supabase store failed: {e}")
 
     print(f"[DB] New leads stored: {len(new_leads)}")
     return new_leads
@@ -742,10 +736,11 @@ def run():
 
     # Check Supabase FIRST for already-sent URLs (persists across redeploys)
     supabase_sent_urls = set()
-    if supabase is not None:
+    if HAS_SUPABASE:
         try:
-            resp = supabase.table("leads").select("url").eq("sent", True).execute()
-            supabase_sent_urls = {row["url"] for row in resp.data}
+            resp = _sb("leads", params={"select": "url", "sent": "eq.true"})
+            if resp is not None:
+                supabase_sent_urls = {row["url"] for row in resp}
         except Exception as e:
             print(f"  [WARN] Supabase dedup query failed: {e}")
 
@@ -792,10 +787,10 @@ def run():
             c2.execute("UPDATE leads SET sent=1 WHERE url=?", (l.get("url"),))
         conn.commit()
         # Also mark as sent in Supabase
-        if supabase is not None:
+        if HAS_SUPABASE:
             for l in high_scored:
                 try:
-                    supabase.table("leads").update({"sent": True}).eq("url", l.get("url")).execute()
+                    _sb("leads", "PATCH", {"sent": True}, params={"url": f"eq.{l.get('url')}"})
                 except Exception as e:
                     print(f"  [WARN] Supabase mark sent failed: {e}")
         generate_html_report(high_scored)
