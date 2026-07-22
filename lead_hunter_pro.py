@@ -601,7 +601,7 @@ def leads_to_tg(leads):
             urg = urgency_icon.get(l.get("urgency", "low"), "\u26AA")
             score = l.get("score", 0)
             msg += (
-                f"  {i}. {title}\n"
+                f"  {i}. <b>{title}</b>\n"
                 f"     \U0001F4CA {score}/10 {urg} {l.get('urgency', 'low').upper()}\n"
             )
             if aspects:
