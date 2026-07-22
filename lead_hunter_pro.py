@@ -182,7 +182,7 @@ def llm_score(title, description):
 
     for client, model in [
         (groq_client, "llama-3.3-70b-versatile"),
-        (li_client, "gemma-4-31b-it"),
+        (li_client, "glm-5.2"),
         (or_client, "meta-llama/llama-3.3-70b-instruct"),
     ]:
         if client is None:
