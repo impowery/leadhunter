@@ -242,8 +242,18 @@ def llm_score(title, description):
                 max_tokens=100,
                 timeout=15,
             )
-            raw = resp.choices[0].message.content.strip()
-            data = extract_json(raw)
+            raw = resp.choices[0].message.content
+            if raw is None:
+                raw = ""
+            raw = raw.strip()
+            if not raw:
+                print(f"  [WARN] LLM empty response ({model})", flush=True)
+                continue
+            try:
+                data = extract_json(raw)
+            except json.JSONDecodeError:
+                print(f"  [WARN] LLM bad JSON ({model}): {raw[:200]}", flush=True)
+                continue
             data.setdefault("score", 0)
             data.setdefault("type", "job")
             data.setdefault("urgency", "low")
