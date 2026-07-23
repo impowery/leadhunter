@@ -18,11 +18,19 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def extract_json(text):
-    text = re.sub(r'^```(?:json)?\s*', '', text)
-    text = re.sub(r'\s*```$', '', text)
-    m = re.search(r'\{.*\}', text, re.DOTALL)
+    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\s*```$', '', text, flags=re.MULTILINE)
+    # Find outermost { ... } block, allow truncated JSON (missing trailing })
+    m = re.search(r'\{.*', text, re.DOTALL)
     if m:
-        return json.loads(m.group())
+        chunk = m.group()
+        # Try to close unclosed JSON
+        if not chunk.endswith("}"):
+            chunk += "}"
+        try:
+            return json.loads(chunk)
+        except json.JSONDecodeError:
+            pass
     raise json.JSONDecodeError("No JSON object found", text, 0)
 
 
@@ -219,8 +227,8 @@ def llm_score(title, description):
         "- urgency: \"low\" | \"medium\" | \"high\"\n"
         "- budget_indicated: true/false\n"
         "- matched_aspects: list of strings (what makes this relevant)\n"
-        "- reason: string explaining the score\n\n"
-        "IMPORTANT: If the title says Senior, Lead, Principal, Director, VP, or Head Of — set score to 0 (we want junior/mid-level).\n"
+        "- reason: one short sentence (max 7 words)\n\n"
+        "IMPORTANT: Keep reason short. If the title says Senior, Lead, Principal, Director, VP, or Head Of — set score to 0.\n"
         "Use 0 for score if the lead is not relevant at all."
     )
 
@@ -239,7 +247,7 @@ def llm_score(title, description):
                     {"role": "user", "content": text},
                 ],
                 temperature=0.1,
-                max_tokens=100,
+                max_tokens=200,
                 timeout=15,
             )
             raw = resp.choices[0].message.content
