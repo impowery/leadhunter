@@ -20,11 +20,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 def extract_json(text):
     text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
     text = re.sub(r'\s*```$', '', text, flags=re.MULTILINE)
-    # Find outermost { ... } block, allow truncated JSON (missing trailing })
     m = re.search(r'\{.*', text, re.DOTALL)
     if m:
-        chunk = m.group()
-        # Try to close unclosed JSON
+        chunk = m.group().rstrip()
         if not chunk.endswith("}"):
             chunk += "}"
         try:
