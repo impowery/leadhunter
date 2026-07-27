@@ -475,7 +475,8 @@ def _parse_telegram_web():
         if not html_text:
             continue
         # Each message has a unique anchor: <a href="https://t.me/channel/123">
-        msg_links = re.findall(r'<a[^>]*href="(https://t\.me/[^"]+/\d+)"[^>]*class="tgme_widget_message_date"[^>]*>', html_text)
+        msg_links = re.findall(r'class="tgme_widget_message_date"[^>]*href="(https://t\.me/[^"]+/\d+)"|<a[^>]*href="(https://t\.me/[^"]+/\d+)"[^>]*class="tgme_widget_message_date"', html_text)  # class before OR after href
+        msg_links = [g1 or g2 for g1, g2 in msg_links]
         msg_texts = re.split(r'<div class="tgme_widget_message_text[^"]*"[^>]*>', html_text)
         # msg_texts[0] is before first message, msg_texts[1:] correspond to each message
         for idx, block in enumerate(msg_texts[1:]):
