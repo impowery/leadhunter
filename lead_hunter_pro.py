@@ -693,7 +693,6 @@ def leads_to_tg(leads):
     if not leads:
         return
 
-    # Clean aspects: remove # from hashtags
     def clean_aspects(aspects):
         return ", ".join(a.lstrip("#").strip() for a in aspects if a.strip())
 
@@ -701,44 +700,67 @@ def leads_to_tg(leads):
         u = url.replace("https://", "").replace("http://", "")
         return u[:50] + ".." if len(u) > 50 else u
 
-    # Group by source
-    from collections import OrderedDict
-    groups = OrderedDict()
-    for l in leads:
-        src = l.get("source", "Other")
-        if src not in groups:
-            groups[src] = []
-        groups[src].append(l)
+    leads_sorted = sorted(leads, key=lambda l: l.get("score", 0), reverse=True)
+    top = [l for l in leads_sorted if l.get("score", 0) >= 8]
+    rest = [l for l in leads_sorted if l.get("score", 0) < 8]
 
     chunks = []
     total = len(leads)
-    msg = f"\U0001F50E New leads: {total}\n" + "\u2500" * 25 + "\n"
 
-    for src, group in groups.items():
-        msg += f"\n\U0001F4E1 {src} ({len(group)})\n"
-        for i, l in enumerate(group[:5], 1):
+    # --- TOP PICKS section ---
+    if top:
+        msg = f"\U0001F525 <b>TOP PICKS</b> ({len(top)}/{total})\n" + "\u2500" * 25 + "\n"
+        for i, l in enumerate(top[:5], 1):
             title = l["title"][:70].replace("#", "")
             aspects = clean_aspects(l.get("matched_aspects", []))
-            urgency_icon = {"high": "\U0001F534", "medium": "\U0001F7E1", "low": "\U0001F7E2"}
-            urg = urgency_icon.get(l.get("urgency", "low"), "\u26AA")
+            reason = l.get("reason", "")
             score = l.get("score", 0)
             msg += (
-                f"  {i}. <b>{title}</b>\n"
-                f"     \U0001F4CA {score}/10 {urg} {l.get('urgency', 'low').upper()}\n"
+                f"\n\u2B50 <b>{title}</b>\n"
+                f"   \U0001F4CA {score}/10  {l.get('source', '?')}\n"
             )
             if l.get("url"):
-                msg += f"     \U0001F517 <a href=\"{l.get('url')}\">{short_url(l.get('url'))}</a>\n"
+                msg += f"   \U0001F517 <a href=\"{l.get('url')}\">{short_url(l.get('url'))}</a>\n"
             if aspects:
-                msg += f"     \U0001F3F7 {aspects}\n"
-        if len(group) > 5:
-            msg += f"     ... +{len(group)-5} more from {src}\n"
-
-        if len(msg) > 3500:
-            chunks.append(msg)
-            msg = ""
-
-    if msg:
+                msg += f"   \U0001F3F7 {aspects}\n"
+            if reason:
+                msg += f"   \U0001F4AC {reason}\n"
+        if len(top) > 5:
+            msg += f"\n   ... +{len(top)-5} more top picks\n"
         chunks.append(msg)
+
+    # --- REST by source ---
+    if rest:
+        from collections import OrderedDict
+        groups = OrderedDict()
+        for l in rest:
+            src = l.get("source", "Other")
+            groups.setdefault(src, []).append(l)
+
+        msg = f"\U0001F50E Other leads ({len(rest)}/{total})\n" + "\u2500" * 25 + "\n"
+        for src, group in groups.items():
+            msg += f"\n\U0001F4E1 {src} ({len(group)})\n"
+            for i, l in enumerate(group[:5], 1):
+                title = l["title"][:70].replace("#", "")
+                aspects = clean_aspects(l.get("matched_aspects", []))
+                urgency_icon = {"high": "\U0001F534", "medium": "\U0001F7E1", "low": "\U0001F7E2"}
+                urg = urgency_icon.get(l.get("urgency", "low"), "\u26AA")
+                score = l.get("score", 0)
+                msg += (
+                    f"  {i}. <b>{title}</b>\n"
+                    f"     \U0001F4CA {score}/10 {urg} {l.get('urgency', 'low').upper()}\n"
+                )
+                if l.get("url"):
+                    msg += f"     \U0001F517 <a href=\"{l.get('url')}\">{short_url(l.get('url'))}</a>\n"
+                if aspects:
+                    msg += f"     \U0001F3F7 {aspects}\n"
+            if len(group) > 5:
+                msg += f"     ... +{len(group)-5} more from {src}\n"
+            if len(msg) > 3500:
+                chunks.append(msg)
+                msg = ""
+        if msg:
+            chunks.append(msg)
 
     for c in chunks:
         send_tg_message(c)
