@@ -84,16 +84,23 @@ def _sb(path, method="GET", data=None, params=None):
 
 KEYWORDS = [
     "n8n", "python", "scraping", "automation", "workflow",
-    "freelance", "remote", "contract", "bot", "api",
+    "freelance", "contract", "bot", "api",
     "chatbot", "llm", "ai", "gpt", "telegram bot",
-    "founding engineer", "consultant", "integration", "webhook",
+    "consultant", "integration", "webhook",
     "zapier", "make", "low-code", "no-code", "selenium",
-    "developer", "backend", "frontend", "fullstack", "engineer",
+    "machine learning", "data pipeline", "etl",
     "blockchain", "web3", "crypto", "solana", "rust",
     "fintech", "defi", "smart contract", "solidity",
-    "devops", "data", "analyst", "machine learning",
-    "CEO", "CTO", "co-founder", "startup",
-    "удаленка", "вакансия", "part-time",
+    "founding engineer", "co-founder",
+    "devops", "analyst",
+    "ai agent", "langchain", "rag", "vector database",
+    "n8n workflow", "ai automation",
+]
+
+EXCLUDE = [
+    "senior", "sr.", "lead", "principal", "staff", "head of",
+    "director", "vp", "vice president", "manager",
+    "intern", "trainee", "junior",
 ]
 
 EXCLUDE = [
@@ -147,15 +154,20 @@ def init_db():
 
 def fetch_url(url, timeout=15):
     try:
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/125.0.0.0 Safari/537.36"
-            )
-        }
+        headers = OrderedDict([
+            ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"),
+            ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"),
+            ("Accept-Language", "en-US,en;q=0.9,ru;q=0.8"),
+            ("Accept-Encoding", "gzip, deflate, br"),
+            ("Connection", "keep-alive"),
+            ("Upgrade-Insecure-Requests", "1"),
+            ("Sec-Fetch-Dest", "document"),
+            ("Sec-Fetch-Mode", "navigate"),
+            ("Sec-Fetch-Site", "none"),
+            ("Sec-Fetch-User", "?1"),
+        ])
         sess = requests.Session()
-        sess.headers.update(headers)
+        sess.headers.update(dict(headers))
         resp = sess.get(url, timeout=timeout)
         resp.raise_for_status()
         return resp.text
@@ -164,26 +176,36 @@ def fetch_url(url, timeout=15):
         return ""
 
 
+SPECIFIC_KW = {"n8n", "python", "scraping", "llm", "chatbot", "telegram bot", "langchain", "rag",
+                "ai agent", "n8n workflow", "selenium", "webhook", "zapier", "make", "low-code", "no-code"}
+GENERAL_KW = {"freelance", "contract", "consultant", "integration", "bot", "api", "automation",
+              "founding engineer", "co-founder", "devops", "analyst", "machine learning",
+              "data pipeline", "etl"}
+
 def keyword_score(text):
     text_lower = text.lower()
     matched = []
+    score = 0.0
     for kw in KEYWORDS:
         if kw.lower() in text_lower:
             matched.append(kw)
+            if kw in SPECIFIC_KW:
+                score += 2.0
+            elif kw in GENERAL_KW:
+                score += 1.5
+            else:
+                score += 1.0
 
-    # Penalize senior/lead/director positions
     excluded = [ex for ex in EXCLUDE if ex.lower() in text_lower]
-
-    score = min(round(len(matched) * 1.5, 1), 10)
     for ex in excluded:
-        score -= 2
-    score = max(0.0, score)
+        score -= 3.0
+    score = max(0.0, min(round(score, 1), 10))
 
     urgency = "low"
     urgent_words = ["urgent", "asap", "immediately", "today", "deadline"]
     if any(w in text_lower for w in urgent_words):
         urgency = "high"
-    elif len(matched) >= 3:
+    elif score >= 4:
         urgency = "medium"
 
     budget_indicated = bool(re.search(r'\$\d+[\d,]*', text))
@@ -200,19 +222,18 @@ def keyword_score(text):
         "urgency": urgency,
         "budget_indicated": budget_indicated,
         "matched_aspects": matched,
-        "reason": f"Keyword match: {', '.join(matched) if matched else 'none'}"
+        "reason": f"Keywords: {', '.join(matched[:5])}" if matched else "No keywords"
     }
 
 
 def llm_score(title, description):
     text = f"Title: {title}\nDescription: {description}"
 
-    # Pre-filter: use keyword score for obvious cases to save LLM tokens
     kw = keyword_score(text)
     if kw["score"] < 2 or kw["score"] > 6:
         return kw
 
-    system_prompt = (
+    model_prompt = (
         "You are an expert in AI automation (n8n, Python, scraping, LLM, "
         "workflow automation, chatbots). Your task is to score a lead for "
         "relevance. We are looking for: freelance, contract, remote work, "
@@ -229,8 +250,8 @@ def llm_score(title, description):
     )
 
     for client, model in [
+        (or_client, "mistralai/mistral-7b-instruct"),
         (groq_client, "llama-3.3-70b-versatile"),
-        (or_client, "meta-llama/llama-3.3-70b-instruct"),
     ]:
         if client is None:
             continue
@@ -238,7 +259,7 @@ def llm_score(title, description):
             resp = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": model_prompt},
                     {"role": "user", "content": text},
                 ],
                 temperature=0.1,
@@ -358,7 +379,11 @@ def parse_remoteok():
 def parse_remote_co():
     print("[Remote.co] Fetching...")
     import time as _time
-    html_text = fetch_url("https://remote.co/remote-jobs/")
+    html_text = fetch_url("https://remote.co/remote-jobs/", timeout=25)
+    if not html_text:
+        print("  [WARN] Remote.co timeout, trying /remote-jobs/category/developer/...")
+        _time.sleep(2)
+        html_text = fetch_url("https://remote.co/remote-jobs/category/developer/", timeout=20)
     if not html_text:
         return []
     leads = []
@@ -368,7 +393,7 @@ def parse_remote_co():
     ):
         url = "https://remote.co" + match.group(1) if match.group(1).startswith("/") else match.group(1)
         title = html.unescape(match.group(2)).strip()
-        if title and "remote" in title.lower():
+        if title:
             leads.append({"title": title, "url": url, "source": "Remote.co"})
         if len(leads) >= 15:
             break
@@ -393,11 +418,24 @@ def parse_wwr():
 
 def parse_reddit_forhire():
     print("[Reddit] Fetching r/forhire...")
-    raw = fetch_url("https://www.reddit.com/r/forhire/hot.json")
+    import time as _time
+
+    urls_to_try = [
+        "https://old.reddit.com/r/forhire/hot.json",
+        "https://old.reddit.com/r/freelance/hot.json",
+        "https://www.reddit.com/r/forhire/hot.json",
+        "https://www.reddit.com/r/freelance/hot.json",
+    ]
+    raw = ""
+    for u in urls_to_try:
+        raw = fetch_url(u, timeout=20)
+        if raw:
+            print(f"  [OK] {u}")
+            break
+        _time.sleep(1)
+
     if not raw:
-        print("  [WARN] Reddit unreachable, trying r/freelance...")
-        raw = fetch_url("https://www.reddit.com/r/freelance/hot.json")
-    if not raw:
+        print("  [WARN] All Reddit endpoints failed")
         return []
 
     leads = []
