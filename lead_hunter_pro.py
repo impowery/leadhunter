@@ -250,7 +250,7 @@ def llm_score(title, description):
     )
 
     for client, model in [
-        (or_client, "mistralai/mistral-7b-instruct"),
+        (or_client, "meta-llama/llama-3.3-70b-instruct"),
         (groq_client, "llama-3.3-70b-versatile"),
     ]:
         if client is None:
