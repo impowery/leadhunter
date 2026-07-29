@@ -83,7 +83,7 @@ def _sb(path, method="GET", data=None, params=None):
         return None
 
 KEYWORDS = [
-    "n8n", "python", "scraping", "automation", "workflow",
+    "n8n", "python", "scraping", "scrape", "scraper", "automation", "workflow",
     "freelance", "contract", "bot", "api",
     "chatbot", "llm", "ai", "gpt", "telegram bot",
     "consultant", "integration", "webhook",
@@ -176,7 +176,7 @@ def fetch_url(url, timeout=15):
         return ""
 
 
-SPECIFIC_KW = {"n8n", "python", "scraping", "llm", "chatbot", "telegram bot", "langchain", "rag",
+SPECIFIC_KW = {"n8n", "python", "scraping", "scrape", "scraper", "llm", "chatbot", "telegram bot", "langchain", "rag",
                 "ai agent", "n8n workflow", "selenium", "webhook", "zapier", "make", "low-code", "no-code"}
 GENERAL_KW = {"freelance", "contract", "consultant", "integration", "bot", "api", "automation",
               "founding engineer", "co-founder", "devops", "analyst", "machine learning",
