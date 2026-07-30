@@ -806,6 +806,12 @@ def run():
         result["source"] = lead.get("source", "?")
         scored.append(result)
 
+    # Debug: show score distribution
+    scores = [s.get("score", 0) for s in scored]
+    top5 = sorted(scores, reverse=True)[:5]
+    avg = sum(scores) / len(scores) if scores else 0
+    print(f"[Score] total={len(scores)} avg={avg:.1f} top={top5}", flush=True)
+
     new_leads = store_leads(conn, scored)
 
     # Persistent dedup: skip leads already sent in previous runs
@@ -835,6 +841,10 @@ def run():
     sent_urls.update(supabase_sent_urls)
 
     high_scored = [l for l in new_leads if l.get("score", 0) >= 6]
+    # Debug: why no high scores?
+    if high_scored:
+        hs_scores = [h.get("score", 0) for h in high_scored]
+        print(f"[Debug] Before filters: {len(high_scored)} leads >=6, scores={sorted(hs_scores, reverse=True)[:10]}", flush=True)
     # Hard filter: remove Senior/Lead/Director/VP titles
     senior_pattern = re.compile(r"\b(senior|sr\.?|lead|principal|staff|director|vp\b|vice president|head of)", re.I)
     high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
