@@ -113,14 +113,16 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 TELEGRAM_SOURCES = [
-    {"name": "web3_jobs_crypto_vazima", "url": "https://t.me/web3_jobs_crypto_vazima"},
+    {"name": "freelance_work", "url": "https://t.me/freelance_work"},
+    {"name": "remotejobschannel", "url": "https://t.me/remotejobschannel"},
+    {"name": "python_jobs", "url": "https://t.me/python_jobs"},
+    {"name": "freelancetoday", "url": "https://t.me/freelancetoday"},
     {"name": "jobstash", "url": "https://t.me/jobstash"},
     {"name": "workingincrypto", "url": "https://t.me/workingincrypto"},
     {"name": "cryptoheadhunter", "url": "https://t.me/cryptoheadhunter"},
     {"name": "opento_crypto", "url": "https://t.me/opento_crypto"},
     {"name": "web30job", "url": "https://t.me/web30job"},
     {"name": "cryptovakansii", "url": "https://t.me/cryptovakansii"},
-    {"name": "the_workys", "url": "https://t.me/the_workys"},
     {"name": "xCareers", "url": "https://t.me/xCareers"},
 ]
 
@@ -846,11 +848,14 @@ def run():
         hs_scores = [h.get("score", 0) for h in high_scored]
         print(f"[Debug] Before filters: {len(high_scored)} leads >=6, scores={sorted(hs_scores, reverse=True)[:10]}", flush=True)
     # Hard filter: remove Senior/Lead/Director/VP titles
-    senior_pattern = re.compile(r"\b(senior|sr\.?|lead|principal|staff|director|vp\b|vice president|head of)", re.I)
+    senior_pattern = re.compile(r"\b(senior|sr\.?|principal|staff|director|vp\b|vice president|head of)", re.I)
+    # Debug: show what gets filtered
+    for l in (high_scored or []):
+        if senior_pattern.search(l["title"]):
+            print(f"  [Filtered] SENIOR: {l['title'][:70]} score={l.get('score',0)}", flush=True)
     high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
     # Remove resumes (#Резюме / resumes)
     high_scored = [l for l in high_scored if not re.search(r"#Резюме|#resume|резюме", l["title"], re.I)]
-    # Deduplicate: skip if hash already in sent_hashes OR url already sent
     unique = []
     for l in high_scored:
         h = str(hash(l["title"][:60] + l.get("source", "")))
