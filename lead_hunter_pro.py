@@ -251,7 +251,7 @@ def llm_score(title, description):
     )
 
     for client, model in [
-        (or_client, "microsoft/phi-4"),
+        (or_client, "qwen/qwen3.7-flash"),
         (groq_client, "llama-3.3-70b-versatile"),
     ]:
         if client is None:
