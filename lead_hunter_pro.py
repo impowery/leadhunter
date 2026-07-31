@@ -43,9 +43,11 @@ from telethon import TelegramClient
 
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 OR_KEY = os.getenv("OPENROUTER_API_KEY")
+OR_KEY2 = os.getenv("OPENROUTER_API_KEY2")
 
 groq_client = OpenAI(api_key=GROQ_KEY, base_url="https://api.groq.com/openai/v1") if GROQ_KEY else None
 or_client = OpenAI(api_key=OR_KEY, base_url="https://openrouter.ai/api/v1") if OR_KEY else None
+or_client2 = OpenAI(api_key=OR_KEY2, base_url="https://openrouter.ai/api/v1") if OR_KEY2 else None
 
 TG_API_ID = int(os.getenv("TG_API_ID", "0"))
 TG_API_HASH = os.getenv("TG_API_HASH", "")
@@ -252,6 +254,7 @@ def llm_score(title, description):
 
     for client, model in [
         (or_client, "qwen/qwen3.7-flash"),
+        (or_client2, "qwen/qwen3.7-flash"),
         (groq_client, "llama-3.3-70b-versatile"),
     ]:
         if client is None:
