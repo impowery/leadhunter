@@ -160,7 +160,6 @@ def fetch_url(url, timeout=15):
             ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"),
             ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"),
             ("Accept-Language", "en-US,en;q=0.9,ru;q=0.8"),
-            ("Accept-Encoding", "gzip, deflate, br"),
             ("Connection", "keep-alive"),
             ("Upgrade-Insecure-Requests", "1"),
             ("Sec-Fetch-Dest", "document"),
@@ -330,6 +329,9 @@ def parse_hn_jobs():
         data = json.loads(raw)
         for hit in data.get("hits", []):
             title = hit.get("title", "")
+            # Only "Who is hiring" posts — skip "Who wants to be hired" (people looking for jobs)
+            if "who is hiring" not in title.lower():
+                continue
             url = hit.get("url") or hit.get("objectID", "")
             if not url.startswith("http"):
                 url = f"https://news.ycombinator.com/item?id={url}"
@@ -410,10 +412,15 @@ def parse_wwr():
         return []
     leads = []
     for match in re.finditer(
-        r'<a[^>]*href="(https://weworkremotely\.com/remote-jobs/[^"]+)"[^>]*>\s*<span[^>]*class="title"[^>]*>([^<]+)</span>',
+        r'<a[^>]*href="(/remote-jobs/[^"]+)"[^>]*>\s*([^<]+)',
         html_text, re.DOTALL
     ):
-        leads.append({"title": html.unescape(match.group(2)).strip(), "url": match.group(1), "source": "WeWorkRemotely"})
+        href = match.group(1)
+        if not href.startswith("/remote-jobs/find-your-plan"):
+            url = "https://weworkremotely.com" + href if href.startswith("/") else href
+            title = html.unescape(match.group(2)).strip()
+            if title and len(title) > 3:
+                leads.append({"title": title, "url": url, "source": "WeWorkRemotely"})
     print(f"  {len(leads)} leads")
     return leads
 
@@ -437,18 +444,38 @@ def parse_reddit_forhire():
         _time.sleep(1)
 
     if not raw:
+        print("  [WARN] JSON endpoints failed, trying RSS...")
+        for u in ["https://www.reddit.com/r/forhire/hot.rss", "https://www.reddit.com/r/freelance/hot.rss"]:
+            raw = fetch_url(u, timeout=20)
+            if raw:
+                print(f"  [OK] {u}")
+                break
+
+    if not raw:
         print("  [WARN] All Reddit endpoints failed")
         return []
 
     leads = []
     try:
-        data = json.loads(raw)
-        for child in data.get("data", {}).get("children", []):
-            post = child.get("data", {})
-            title = post.get("title", "")
-            url = post.get("url", "")
-            if title:
-                leads.append({"title": title, "url": url, "source": "Reddit"})
+        if raw.lstrip().startswith("<"):  # RSS XML
+            entries = re.findall(r"<entry>(.*?)</entry>", raw, re.DOTALL)
+            for e in entries:
+                t = re.search(r"<title>(.*?)</title>", e, re.DOTALL)
+                l = re.search(r'<link[^>]*href="(.*?)"', e) or re.search(r'<link[^>]*>(.*?)</link>', e)
+                if t:
+                    title = html.unescape(re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', t.group(1))).strip()
+                    url = html.unescape(l.group(1)) if l else ""
+                    # Only [Hiring] posts are opportunities; [For Hire] are freelancers advertising
+                    if re.search(r"\[hiring\]", title, re.I) or not re.search(r"\[for\s*hire\]|\[for hire\]", title, re.I):
+                        leads.append({"title": title, "url": url, "source": "Reddit"})
+        else:  # JSON
+            data = json.loads(raw)
+            for child in data.get("data", {}).get("children", []):
+                post = child.get("data", {})
+                title = post.get("title", "")
+                url = post.get("url", "")
+                if title:
+                    leads.append({"title": title, "url": url, "source": "Reddit"})
     except Exception as e:
         print(f"  [WARN] Reddit parse error: {e}")
     print(f"  {len(leads)} leads")
