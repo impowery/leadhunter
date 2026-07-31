@@ -381,26 +381,20 @@ def parse_remoteok():
 
 
 def parse_remote_co():
-    print("[Remote.co] Fetching...")
-    import time as _time
-    html_text = fetch_url("https://remote.co/remote-jobs/", timeout=25)
-    if not html_text:
-        print("  [WARN] Remote.co timeout, trying /remote-jobs/category/developer/...")
-        _time.sleep(2)
-        html_text = fetch_url("https://remote.co/remote-jobs/category/developer/", timeout=20)
-    if not html_text:
+    print("[Remotive] Fetching (replaces Remote.co)...")
+    raw = fetch_url("https://remotive.com/api/remote-jobs", timeout=20)
+    if not raw:
         return []
     leads = []
-    for match in re.finditer(
-        r'<a[^>]*href="(/remote-jobs/[^"]+)"[^>]*>([^<]+)</a>',
-        html_text
-    ):
-        url = "https://remote.co" + match.group(1) if match.group(1).startswith("/") else match.group(1)
-        title = html.unescape(match.group(2)).strip()
-        if title:
-            leads.append({"title": title, "url": url, "source": "Remote.co"})
-        if len(leads) >= 15:
-            break
+    try:
+        data = json.loads(raw)
+        for job in data.get("jobs", [])[:20]:
+            title = job.get("title", "")
+            url = job.get("url", "")
+            if title:
+                leads.append({"title": title, "url": url, "source": "Remotive"})
+    except Exception as e:
+        print(f"  [WARN] Remotive error: {e}")
     print(f"  {len(leads)} leads")
     return leads
 
