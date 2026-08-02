@@ -103,6 +103,8 @@ KEYWORDS = [
     "devops", "analyst",
     "ai agent", "langchain", "rag", "vector database",
     "n8n workflow", "ai automation",
+    "english", "english speaking", "english required", "fluent english",
+    "english proficiency", "good english",
 ]
 
 EXCLUDE = [
@@ -188,7 +190,9 @@ def fetch_url(url, timeout=15):
 
 
 SPECIFIC_KW = {"n8n", "python", "scraping", "scrape", "scraper", "llm", "chatbot", "telegram bot", "langchain", "rag",
-                "ai agent", "n8n workflow", "selenium", "webhook", "zapier", "make", "low-code", "no-code"}
+                "ai agent", "n8n workflow", "selenium", "webhook", "zapier", "make", "low-code", "no-code",
+                "english", "english speaking", "english required", "fluent english",
+                "english proficiency", "good english"}
 GENERAL_KW = {"freelance", "contract", "consultant", "integration", "bot", "api", "automation",
               "founding engineer", "co-founder", "devops", "analyst", "machine learning",
               "data pipeline", "etl"}
@@ -248,7 +252,10 @@ def llm_score(title, description):
         "You are an expert in AI automation (n8n, Python, scraping, LLM, "
         "workflow automation, chatbots). Your task is to score a lead for "
         "relevance. We are looking for: freelance, contract, remote work, "
-        "founding engineer, or consultant opportunities in AI automation.\n\n"
+        "founding engineer, or consultant opportunities in AI automation.\n"
+        "SPECIAL RULE: If the description explicitly REQUIRES ENGLISH LANGUAGE "
+        "(good command of english, fluent english, etc.), score MUST be at least 6 "
+        "— we accept such jobs even outside IT/automation.\n\n"
         "Return ONLY valid JSON with these fields:\n"
         "- score: 0-10 (how relevant this lead is)\n"
         "- type: \"client\" | \"job\" | \"partner\"\n"
@@ -303,6 +310,58 @@ def llm_score(title, description):
             continue
 
     return keyword_score(text)
+
+
+def parse_jobsdb(max_pages=4, fetch_desc=True):
+    """JobsDB Thailand: any jobs whose description requires English."""
+    print("[JobsDB] Fetching job listings...", flush=True)
+    leads = []
+    seen = set()
+    for page in range(max_pages):
+        url = f"https://th.jobsdb.com/jobs?page={page}"
+        t = fetch_url(url, timeout=25)
+        if not t:
+            print(f"  [WARN] JobsDB page {page} failed", flush=True)
+            continue
+        chunks = t.split('data-testid="job-card"')
+        n = 0
+        for chunk in chunks[1:]:
+            am = re.search(r'aria-label="([^"]+)"', chunk)
+            hm = re.search(r'href="(/job/\d{4,})', chunk)
+            if not (am and hm):
+                continue
+            jid = hm.group(1).split("/")[-1]
+            if jid in seen:
+                continue
+            seen.add(jid)
+            title = html.unescape(am.group(1)).strip()[:200]
+            leads.append({
+                "title": title,
+                "url": f"https://th.jobsdb.com/job/{jid}",
+                "source": "JobsDB",
+                "description": "",
+            })
+            n += 1
+        print(f"  [JobsDB] page {page}: {n} jobs", flush=True)
+
+    if fetch_desc and leads:
+        print(f"  [JobsDB] Fetching descriptions for {len(leads)} jobs...", flush=True)
+        for i, l in enumerate(leads):
+            try:
+                t = fetch_url(l["url"], timeout=20)
+                if t:
+                    i0 = t.find('data-automation="jobAdDetails"')
+                    if i0 > 0:
+                        chunk = t[i0:i0 + 20000]
+                        txt = re.sub(r"<[^>]+>", " ", chunk)
+                        txt = html.unescape(re.sub(r"\s+", " ", txt)).strip()
+                        l["description"] = txt[:1500]
+            except Exception as e:
+                print(f"  [WARN] JobsDB desc {l['url']}: {e}")
+            if (i + 1) % 20 == 0:
+                print(f"  [JobsDB] desc {i + 1}/{len(leads)}", flush=True)
+    print(f"[JobsDB] Total: {len(leads)} jobs", flush=True)
+    return leads
 
 
 def parse_hn_jobs():
@@ -824,6 +883,8 @@ def run():
     all_raw.extend(parse_remote_co())
     print("[DBG] parse_wwr...", flush=True)
     all_raw.extend(parse_wwr())
+    print("[DBG] parse_jobsdb...", flush=True)
+    all_raw.extend(parse_jobsdb())
 
     print(f"[Raw] Total leads collected: {len(all_raw)}", flush=True)
 
@@ -864,7 +925,8 @@ def run():
             continue
         title = lead["title"][:200]
         print(f"  Scoring [{i+1}/{len(all_raw)}]: {title[:60]}...", flush=True)
-        result = llm_score(title, title)
+        desc = lead.get("description") or title
+        result = llm_score(title, desc[:2000])
         result["title"] = title
         result["url"] = lead.get("url", "")
         result["source"] = lead.get("source", "?")
