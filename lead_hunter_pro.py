@@ -7,11 +7,17 @@ import argparse
 import time
 import html
 import asyncio
+import hashlib
 import threading
 from datetime import datetime
 from io import StringIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from collections import OrderedDict
+
+
+def stable_hash(s):
+    """Deterministic hash (Python's hash() is randomized per process)."""
+    return hashlib.sha256(s.encode("utf-8", "replace")).hexdigest()[:16]
 
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -819,6 +825,36 @@ def run():
 
     print(f"[Raw] Total leads collected: {len(all_raw)}", flush=True)
 
+    # Pre-dedup: skip scoring leads already known in local DB or Supabase
+    known_urls = set()
+    try:
+        c = conn.cursor()
+        for row in c.execute("SELECT url FROM leads"):
+            if row[0]:
+                known_urls.add(row[0])
+    except Exception as e:
+        print(f"  [WARN] local known-urls query failed: {e}")
+    if HAS_SUPABASE:
+        try:
+            off = 0
+            while True:
+                resp = _sb("leads", params={"select": "url", "limit": 1000, "offset": off})
+                if not resp:
+                    break
+                for row in resp:
+                    if row.get("url"):
+                        known_urls.add(row["url"])
+                if len(resp) < 1000:
+                    break
+                off += 1000
+        except Exception as e:
+            print(f"  [WARN] Supabase known-urls fetch failed: {e}")
+    before = len(all_raw)
+    all_raw = [l for l in all_raw if not l.get("url") or l.get("url") not in known_urls]
+    skipped = before - len(all_raw)
+    if skipped:
+        print(f"[Dedup] Skipped {skipped} already-known leads (known_urls={len(known_urls)})", flush=True)
+
     scored = []
     for i, lead in enumerate(all_raw):
         if not isinstance(lead, dict) or not lead.get("title"):
@@ -882,10 +918,15 @@ def run():
     high_scored = [l for l in high_scored if not re.search(r"#Резюме|#resume|резюме", l["title"], re.I)]
     unique = []
     for l in high_scored:
-        h = str(hash(l["title"][:60] + l.get("source", "")))
-        if h not in sent_hashes and l.get("url") not in sent_urls:
-            sent_hashes.add(h)
-            unique.append(l)
+        h = stable_hash(l["title"][:60] + l.get("source", ""))
+        if h in sent_hashes:
+            print(f"  [Dedup] Already sent (hash): {l['title'][:70]} score={l.get('score',0)}", flush=True)
+            continue
+        if l.get("url") in sent_urls:
+            print(f"  [Dedup] Already sent (url): {l['title'][:70]} score={l.get('score',0)}", flush=True)
+            continue
+        sent_hashes.add(h)
+        unique.append(l)
     high_scored = unique
     high_scored.sort(key=lambda x: x.get("score", 0), reverse=True)
     print(f"[Filter] High-scoring leads (>=6): {len(high_scored)}")
@@ -896,7 +937,7 @@ def run():
         # Save hashes of sent leads to avoid re-sending after redeploy
         with open(sent_file, "a", encoding="utf-8") as f:
             for l in high_scored:
-                h = str(hash(l["title"][:60] + l.get("source", "")))
+                h = stable_hash(l["title"][:60] + l.get("source", ""))
                 f.write(h + "\n")
         # Mark as sent in local DB
         for l in high_scored:
