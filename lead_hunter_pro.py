@@ -197,7 +197,7 @@ GENERAL_KW = {"freelance", "contract", "consultant", "integration", "bot", "api"
               "founding engineer", "co-founder", "devops", "analyst", "machine learning",
               "data pipeline", "etl"}
 
-def keyword_score(text):
+def keyword_score(text, allow_senior=False):
     text_lower = text.lower()
     matched = []
     score = 0.0
@@ -211,9 +211,10 @@ def keyword_score(text):
             else:
                 score += 1.0
 
-    excluded = [ex for ex in EXCLUDE if ex.lower() in text_lower]
-    for ex in excluded:
-        score -= 3.0
+    if not allow_senior:
+        excluded = [ex for ex in EXCLUDE if ex.lower() in text_lower]
+        for ex in excluded:
+            score -= 3.0
     score = max(0.0, min(round(score, 1), 10))
 
     urgency = "low"
@@ -241,13 +242,16 @@ def keyword_score(text):
     }
 
 
-def llm_score(title, description):
+def llm_score(title, description, allow_senior=False):
     text = f"Title: {title}\nDescription: {description}"
 
-    kw = keyword_score(text)
+    kw = keyword_score(text, allow_senior=allow_senior)
     if kw["score"] < 2 or kw["score"] > 6:
         return kw
 
+    senior_rule = (
+        "IMPORTANT: Keep reason short. If the title says Senior, Lead, Principal, Director, VP, or Head Of — set score to 0.\n"
+    )
     model_prompt = (
         "You are an expert in AI automation (n8n, Python, scraping, LLM, "
         "workflow automation, chatbots). Your task is to score a lead for "
@@ -263,8 +267,8 @@ def llm_score(title, description):
         "- budget_indicated: true/false\n"
         "- matched_aspects: list of strings (what makes this relevant)\n"
         "- reason: one short sentence (max 7 words)\n\n"
-        "IMPORTANT: Keep reason short. If the title says Senior, Lead, Principal, Director, VP, or Head Of — set score to 0.\n"
-        "Use 0 for score if the lead is not relevant at all."
+        + (senior_rule if not allow_senior else "")
+        + "Use 0 for score if the lead is not relevant at all."
     )
 
     for client, model in [
@@ -926,7 +930,8 @@ def run():
         title = lead["title"][:200]
         print(f"  Scoring [{i+1}/{len(all_raw)}]: {title[:60]}...", flush=True)
         desc = lead.get("description") or title
-        result = llm_score(title, desc[:2000])
+        allow_senior = lead.get("source") == "JobsDB"
+        result = llm_score(title, desc[:2000], allow_senior=allow_senior)
         result["title"] = title
         result["url"] = lead.get("url", "")
         result["source"] = lead.get("source", "?")
@@ -971,13 +976,13 @@ def run():
     if high_scored:
         hs_scores = [h.get("score", 0) for h in high_scored]
         print(f"[Debug] Before filters: {len(high_scored)} leads >=6, scores={sorted(hs_scores, reverse=True)[:10]}", flush=True)
-    # Hard filter: remove Senior/Lead/Director/VP titles
+    # Hard filter: remove Senior/Lead/Director/VP titles (JobsDB exempt — English jobs wanted)
     senior_pattern = re.compile(r"\b(senior|sr\.?|principal|staff|director|vp\b|vice president|head of)", re.I)
     # Debug: show what gets filtered
     for l in (high_scored or []):
-        if senior_pattern.search(l["title"]):
+        if l.get("source") != "JobsDB" and senior_pattern.search(l["title"]):
             print(f"  [Filtered] SENIOR: {l['title'][:70]} score={l.get('score',0)}", flush=True)
-    high_scored = [l for l in high_scored if not senior_pattern.search(l["title"])]
+    high_scored = [l for l in high_scored if l.get("source") == "JobsDB" or not senior_pattern.search(l["title"])]
     # Remove resumes (#Резюме / resumes)
     high_scored = [l for l in high_scored if not re.search(r"#Резюме|#resume|резюме", l["title"], re.I)]
     unique = []
