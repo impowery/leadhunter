@@ -106,13 +106,9 @@ KEYWORDS = [
 ]
 
 EXCLUDE = [
-    "senior", "sr.", "lead", "principal", "staff", "head of",
-    "director", "vp", "vice president", "manager",
-    "intern", "trainee", "junior",
-]
-
-EXCLUDE = [
-    "senior", "sr.", "lead", "principal", "staff", "head of",
+    "senior", "sr.", "team lead", "tech lead", "engineering lead",
+    "lead developer", "lead engineer", "lead architect", "lead designer",
+    "lead recruiter", "principal", "staff", "head of",
     "director", "vp", "vice president", "manager",
 ]
 
