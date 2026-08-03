@@ -876,6 +876,89 @@ def send_tg_message(text):
         print(f"  [WARN] TG send failed: {e}")
 
 
+OUTCOME_FILE = os.path.join(DATA_DIR, "outcomes.json")
+OUTCOME_ORDER = ["replied", "called", "paid"]
+
+
+def load_outcomes():
+    if os.path.exists(OUTCOME_FILE):
+        try:
+            with open(OUTCOME_FILE, encoding="utf-8") as f:
+                return json.loads(f.read() or "{}")
+        except Exception:
+            pass
+    return {}
+
+
+def save_outcomes(d):
+    try:
+        with open(OUTCOME_FILE, "w", encoding="utf-8") as f:
+            f.write(json.dumps(d, ensure_ascii=False, indent=1))
+    except Exception as e:
+        print(f"  [WARN] outcomes save failed: {e}")
+
+
+def record_outcome(url, status):
+    d = load_outcomes()
+    d[url] = status
+    save_outcomes(d)
+    # best-effort PATCH to Supabase (works once `outcome` column exists)
+    if HAS_SUPABASE:
+        try:
+            _sb("leads", "PATCH", {"outcome": status}, params={"url": f"eq.{url}"})
+        except Exception:
+            pass
+    print(f"[Outcome] {url} -> {status}", flush=True)
+    # notify owner
+    send_tg_message(f"\U0001F4C8 <b>Outcome</b>: <code>{status}</code> for {url[:60]}")
+
+
+def tg_poll_outcomes():
+    """Daemon: watch owner's replies to our TG messages; update lead outcomes."""
+    last_update_id = 0
+    commands = {
+        "replied": "replied",
+        "ответ": "replied",
+        "answered": "replied",
+        "called": "called",
+        "созвон": "called",
+        "call": "called",
+        "paid": "paid",
+        "оплачено": "paid",
+        "заказ": "paid",
+        "deal": "paid",
+    }
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/getUpdates"
+            params = {"timeout": 30, "offset": last_update_id, "allowed_updates": ["message"]}
+            r = requests.get(url, params=params, timeout=40)
+            data = r.json()
+            for upd in data.get("result", []):
+                last_update_id = max(last_update_id, upd["update_id"] + 1)
+                msg = upd.get("message")
+                if not msg:
+                    continue
+                text = (msg.get("text") or "").strip().lower()
+                if text not in commands:
+                    continue
+                reply = msg.get("reply_to_message")
+                if not reply:
+                    send_tg_message("Скинь ответом на сообщение с лидом (Reply), например: replied / called / paid")
+                    continue
+                orig = reply.get("text") or ""
+                m = re.search(r"https?://[^\s>]+", orig)
+                if not m:
+                    send_tg_message("Не нашёл ссылку в сообщении, на которое ты ответил")
+                    continue
+                lead_url = m.group(0).rstrip(">").rstrip(".")
+                record_outcome(lead_url, commands[text])
+        except Exception as e:
+            print(f"  [WARN] TG poll error: {e}", flush=True)
+            time.sleep(10)
+        time.sleep(1)
+
+
 PROFILE_TEXT = """Andrey Mashkin: AI Product Builder, Bangkok (remote worldwide).
 - Solo builder, 15+ years in trading & investments (equities, FX, commodities, crypto).
 - Built TradeMind Lite: AI trading journal Telegram bot with crypto payments (Plisio).
@@ -1244,6 +1327,13 @@ def run():
             + "\n".join(src_lines)
             + f"\n\nNew: {len(all_raw)} | dedup-skipped: {skipped} | sent: {len(high_scored)}"
         )
+        oc = load_outcomes()
+        if oc:
+            cnt = {"replied": 0, "called": 0, "paid": 0}
+            for v in oc.values():
+                if v in cnt:
+                    cnt[v] += 1
+            summary += f"\n\n\U0001F4CA <b>Outcomes</b>: replied {cnt['replied']} | called {cnt['called']} | paid {cnt['paid']}"
         send_tg_message(summary)
     except Exception as e:
         print(f"  [WARN] Summary send failed: {e}", flush=True)
@@ -1267,6 +1357,12 @@ def main():
         HTTPServer(("0.0.0.0", 10000), H).serve_forever()
     t = threading.Thread(target=health_server, daemon=True)
     t.start()
+
+    # Outcome tracker: reads owner's replies in TG
+    if TG_BOT_TOKEN and OWNER_CHAT_ID:
+        to = threading.Thread(target=tg_poll_outcomes, daemon=True)
+        to.start()
+        print("[Outcome] tracker started", flush=True)
 
     if args.loop:
         print("[Scheduler] Starting loop mode (4 hour interval).", flush=True)
