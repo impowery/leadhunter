@@ -215,24 +215,28 @@ GENERAL_KW = {"freelance", "contract", "consultant", "integration", "bot", "api"
               "content pipeline", "lead generation", "billing", "subscription", "saas", "mvp",
               "discord bot", "investment", "fintech", "crypto", "defi", "ai", "gpt"}
 
-def keyword_score(text, allow_senior=False):
+def keyword_score(text, allow_senior=False, kw=None, specific=None, general=None, exclude=None):
     text_lower = text.lower()
     matched = []
     score = 0.0
-    for kw in KEYWORDS:
-        if kw.lower() in text_lower:
-            matched.append(kw)
-            if kw in SPECIFIC_KW:
+    kw = kw if kw is not None else KEYWORDS
+    specific = specific if specific is not None else SPECIFIC_KW
+    general = general if general is not None else GENERAL_KW
+    exclude = exclude if exclude is not None else EXCLUDE
+    for k in kw:
+        if k.lower() in text_lower:
+            matched.append(k)
+            if k in specific:
                 score += 2.0
-            elif kw in GENERAL_KW:
+            elif k in general:
                 score += 1.5
             else:
                 score += 1.0
 
     if not allow_senior:
-        excluded = [ex for ex in EXCLUDE if ex.lower() in text_lower]
-        for ex in excluded:
-            score -= 3.0
+        for ex in exclude:
+            if ex.lower() in text_lower:
+                score -= 3.0
     score = max(0.0, min(round(score, 1), 10))
 
     urgency = "low"
@@ -260,39 +264,42 @@ def keyword_score(text, allow_senior=False):
     }
 
 
-def llm_score(title, description, allow_senior=False):
+def llm_score(title, description, allow_senior=False, prompt=None):
     text = f"Title: {title}\nDescription: {description}"
 
     kw = keyword_score(text, allow_senior=allow_senior)
-    if kw["score"] < 2 or kw["score"] > 6:
+    if prompt is None and (kw["score"] < 2 or kw["score"] > 6):
         return kw
 
     senior_rule = (
         "IMPORTANT: Keep reason short. If the title says Senior, Lead, Principal, Director, VP, or Head Of — set score to 0.\n"
     )
-    model_prompt = (
-        "You are an expert AI scorer for a solo AI product builder profile. "
-        "Perfect matches: telegram bots, trading/quant bots, e-commerce "
-        "automation, payment integrations, dashboards, alert systems, "
-        "content automation, lead generation, n8n/Python/LLM automation, "
-        "crypto/DeFi tooling, MVPs, SaaS tools. We build systems that run "
-        "autonomously, priced on value.\n"
-        "We are looking for: freelance, contract, remote work, founding "
-        "engineer, or consultant opportunities in the above areas. "
-        "Traditional web-backend / enterprise / pure frontend roles score LOW.\n"
-        "SPECIAL RULE: If the description explicitly REQUIRES ENGLISH LANGUAGE "
-        "(good command of english, fluent english, etc.), score MUST be at least 6 "
-        "— we accept such jobs even outside the preferred scope.\n\n"
-        "Return ONLY valid JSON with these fields:\n"
-        "- score: 0-10 (how relevant this lead is)\n"
-        "- type: \"client\" | \"job\" | \"partner\"\n"
-        "- urgency: \"low\" | \"medium\" | \"high\"\n"
-        "- budget_indicated: true/false\n"
-        "- matched_aspects: list of strings (what makes this relevant)\n"
-        "- reason: one short sentence (max 7 words)\n\n"
-        + (senior_rule if not allow_senior else "")
-        + "Use 0 for score if the lead is not relevant at all."
-    )
+    if prompt is None:
+        model_prompt = (
+            "You are an expert AI scorer for a solo AI product builder profile. "
+            "Perfect matches: telegram bots, trading/quant bots, e-commerce "
+            "automation, payment integrations, dashboards, alert systems, "
+            "content automation, lead generation, n8n/Python/LLM automation, "
+            "crypto/DeFi tooling, MVPs, SaaS tools. We build systems that run "
+            "autonomously, priced on value.\n"
+            "We are looking for: freelance, contract, remote work, founding "
+            "engineer, or consultant opportunities in the above areas. "
+            "Traditional web-backend / enterprise / pure frontend roles score LOW.\n"
+            "SPECIAL RULE: If the description explicitly REQUIRES ENGLISH LANGUAGE "
+            "(good command of english, fluent english, etc.), score MUST be at least 6 "
+            "— we accept such jobs even outside the preferred scope.\n\n"
+            "Return ONLY valid JSON with these fields:\n"
+            "- score: 0-10 (how relevant this lead is)\n"
+            "- type: \"client\" | \"job\" | \"partner\"\n"
+            "- urgency: \"low\" | \"medium\" | \"high\"\n"
+            "- budget_indicated: true/false\n"
+            "- matched_aspects: list of strings (what makes this relevant)\n"
+            "- reason: one short sentence (max 7 words)\n\n"
+            + (senior_rule if not allow_senior else "")
+            + "Use 0 for score if the lead is not relevant at all."
+        )
+    else:
+        model_prompt = prompt
 
     for client, model in [
         (or_client, "qwen/qwen3.7-flash"),
@@ -962,6 +969,151 @@ def send_tg_message(text):
             print(f"  [WARN] Guest bot send failed: {e}")
 
 
+GUESTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guests.json")
+
+
+def load_guests():
+    """Load guest profiles from guests.json next to the script.
+    Each guest: {name, bot_token, chat_id, email, profile, keywords[], exclude[]}."""
+    if not os.path.exists(GUESTS_FILE):
+        return []
+    try:
+        with open(GUESTS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            print("  [WARN] guests.json: expected a list", flush=True)
+            return []
+        guests = []
+        for g in data:
+            if not g.get("bot_token") or not g.get("chat_id"):
+                print(f"  [WARN] Guest {g.get('name', '?')}: missing bot_token/chat_id, skipped", flush=True)
+                continue
+            guests.append({
+                "name": str(g.get("name", "Guest")),
+                "bot_token": str(g["bot_token"]).strip(),
+                "chat_id": str(g["chat_id"]).strip(),
+                "email": str(g.get("email", "")).strip(),
+                "profile": str(g.get("profile", "")) or PROFILE_TEXT,
+                "keywords": [k.strip() for k in g.get("keywords", []) if str(k).strip()],
+                "exclude": [k.strip() for k in g.get("exclude", []) if str(k).strip()],
+            })
+        return guests
+    except Exception as e:
+        print(f"  [WARN] guests.json parse error: {e}", flush=True)
+        return []
+
+
+def send_tg_message_to(bot_token, chat_id, text):
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        r = requests.post(url, json={
+            "chat_id": chat_id,
+            "text": text[:4000],
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }, timeout=10)
+        return r.status_code == 200
+    except Exception as e:
+        print(f"  [WARN] TG send to guest failed: {e}", flush=True)
+        return False
+
+
+def guest_scoring_prompt(guest):
+    kw_line = ", ".join(guest.get("keywords", [])) or "none specified"
+    return (
+        "You are an expert AI scorer for the following freelance profile:\n\n"
+        f"{guest.get('profile', '')}\n\n"
+        f"Preferred keywords: {kw_line}\n"
+        "We are looking for: freelance, contract, remote work, founding "
+        "engineer, or consultant opportunities that match this profile.\n\n"
+        "Return ONLY valid JSON with these fields:\n"
+        "- score: 0-10 (how relevant this lead is)\n"
+        "- type: \"client\" | \"job\" | \"partner\"\n"
+        "- urgency: \"low\" | \"medium\" | \"high\"\n"
+        "- budget_indicated: true/false\n"
+        "- matched_aspects: list of strings (what makes this relevant)\n"
+        "- reason: one short sentence (max 7 words)\n\n"
+        "Use 0 for score if the lead is not relevant to this profile."
+    )
+
+
+def process_guest(guest, all_raw, conn=None):
+    """Score the shared raw pool under THIS guest's own profile and deliver
+    matches (>=6) plus applications (top-5 of >=8) via the guest's own bot."""
+    name = guest.get("name", "Guest")
+    print(f"[Guest:{name}] Scoring {len(all_raw)} raw leads under guest profile...", flush=True)
+    kw = guest.get("keywords", [])
+    exclude = guest.get("exclude", [])
+    spec = set(kw)
+    scored = []
+    for i, lead in enumerate(all_raw):
+        if not isinstance(lead, dict) or not lead.get("title"):
+            continue
+        title = lead["title"][:200]
+        desc = lead.get("description") or title
+        text = f"Title: {title}\nDescription: {desc}"
+        result = keyword_score(text, allow_senior=True, kw=kw, specific=spec,
+                               general=set(), exclude=exclude)
+        if 2 <= result["score"] <= 6:
+            llm = llm_score(title, desc[:2000], allow_senior=True,
+                            prompt=guest_scoring_prompt(guest))
+            if llm and llm.get("score", 0) >= 0:
+                result = llm
+        result["title"] = title
+        result["url"] = lead.get("url", "")
+        result["source"] = lead.get("source", "?")
+        result["description"] = desc[:800]
+        scored.append(result)
+
+    picked = [l for l in scored if l.get("score", 0) >= 6]
+    picked.sort(key=lambda x: x.get("score", 0), reverse=True)
+    if not picked:
+        print(f"[Guest:{name}] No leads >= 6 this scan.", flush=True)
+        return
+
+    sent_urls = set()
+    if conn is not None:
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS guest_leads (guest TEXT, url TEXT, title TEXT, "
+                "score REAL, source TEXT, created_at TEXT)"
+            )
+            conn.commit()
+            cur = conn.execute("SELECT url FROM guest_leads WHERE guest=?", (name,))
+            sent_urls = {r[0] for r in cur if r[0]}
+        except Exception as e:
+            print(f"  [WARN] guest_leads query error: {e}", flush=True)
+
+    fresh = []
+    for l in picked:
+        if l.get("url") and l["url"] in sent_urls:
+            print(f"  [Guest:{name}] already sent: {l['title'][:60]}", flush=True)
+            continue
+        fresh.append(l)
+    if not fresh:
+        print(f"[Guest:{name}] Nothing new for this guest.", flush=True)
+        return
+
+    send_fn = lambda t: send_tg_message_to(guest["bot_token"], guest["chat_id"], t)
+    leads_to_tg(fresh, send_fn=send_fn)
+    send_applications(fresh, send_fn=send_fn,
+                      profile_text=guest.get("profile"), email=guest.get("email"))
+
+    if conn is not None:
+        try:
+            for l in fresh:
+                conn.execute(
+                    "INSERT INTO guest_leads (guest, url, title, score, source, created_at) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (name, l.get("url", ""), l["title"], l.get("score", 0),
+                     l.get("source", "?"), datetime.now().isoformat())
+                )
+            conn.commit()
+        except Exception as e:
+            print(f"  [WARN] guest_leads save error: {e}", flush=True)
+    print(f"[Guest:{name}] Delivered {len(fresh)} leads (>=6).", flush=True)
+
+
 OUTCOME_FILE = os.path.join(DATA_DIR, "outcomes.json")
 OUTCOME_ORDER = ["replied", "called", "paid"]
 
@@ -1056,9 +1208,10 @@ PROFILE_TEXT = """Andrey Mashkin: AI Product Builder, Bangkok (remote worldwide)
 - Contact: onlinebis2016@gmail.com."""
 
 
-def generate_application(lead):
+def generate_application(lead, profile_text=None, email=None):
     """Generate a short personalized reply for the given lead (score >= 8)."""
     try:
+        profile_text = profile_text or PROFILE_TEXT
         title = lead.get("title", "")
         desc = (lead.get("description") or title)[:1000]
         aspects = ", ".join(lead.get("matched_aspects", [])[:6]) or "none"
@@ -1066,14 +1219,15 @@ def generate_application(lead):
         prompt = (
             "You are an AI assistant writing the FIRST message from a freelance AI product builder "
             "applying to a job/project. Use the profile below.\n\n"
-            f"{PROFILE_TEXT}\n\n"
+            f"{profile_text}\n\n"
             f"Job title: {title}\n"
             f"Job description: {desc}\n"
             f"Relevant aspects: {aspects}\n\n"
             f"Write a short reply message ({'in Russian' if lang == 'RU' else 'in English'}), "
             "3-6 sentences max, plain text, no markdown, no signature. "
             "PERSONAL: mention 1-2 concrete skills from the profile that directly match this exact job. "
-            "End with a call to action (e.g. 'Happy to discuss, my email is below'). "
+            + (f"Your contact email to include at the end: {email}\n" if email else "")
+            + "End with a call to action (e.g. 'Happy to discuss, my email is below'). "
             "Do NOT invent experience. Return ONLY the message text."
         )
         for client, model in [
@@ -1237,14 +1391,15 @@ def decorate_wwr_links(lead):
         lead["wwr_paid_only"] = True
 
 
-def send_applications(leads):
+def send_applications(leads, send_fn=None, profile_text=None, email=None):
     """Send ready-to-copy reply for top leads: score >= 8, max 5 per scan."""
+    send_fn = send_fn or send_tg_message
     candidates = sorted(
         [l for l in leads if l.get("score", 0) >= 8],
         key=lambda x: x.get("score", 0), reverse=True,
     )[:5]
     for l in candidates:
-        reply = generate_application(l)
+        reply = generate_application(l, profile_text=profile_text, email=email)
         if not reply:
             print(f"  [App] No reply generated for: {l['title'][:60]}", flush=True)
             continue
@@ -1258,14 +1413,15 @@ def send_applications(leads):
             f"👤 {html.escape(contact)}\n"
             f"Источник: {l.get('source', '?')}"
         )
-        send_tg_message(msg)
+        send_fn(msg)
         print(f"[App] reply sent for: {title[:60]}", flush=True)
         time.sleep(0.5)
 
 
-def leads_to_tg(leads):
+def leads_to_tg(leads, send_fn=None):
     if not leads:
         return
+    send_fn = send_fn or send_tg_message
 
     def clean_aspects(aspects):
         return ", ".join(a.lstrip("#").strip() for a in aspects if a.strip())
@@ -1337,7 +1493,7 @@ def leads_to_tg(leads):
             chunks.append(msg)
 
     for c in chunks:
-        send_tg_message(c)
+        send_fn(c)
         time.sleep(0.5)
 
 
@@ -1429,6 +1585,17 @@ def run():
     skipped = before - len(all_raw)
     if skipped:
         print(f"[Dedup] Skipped {skipped} already-known leads (known_urls={len(known_urls)})", flush=True)
+
+    # Guest profiles: score the same raw pool under each guest's OWN profile
+    # and deliver via their own bot (leads >=6, applications for top-5 >=8).
+    try:
+        for guest in load_guests():
+            try:
+                process_guest(guest, all_raw, conn=conn)
+            except Exception as e:
+                print(f"  [WARN] Guest processing failed for {guest.get('name', '?')}: {e}", flush=True)
+    except Exception as e:
+        print(f"  [WARN] Guests load failed: {e}", flush=True)
 
     scored = []
     for i, lead in enumerate(all_raw):
@@ -1533,6 +1700,14 @@ def run():
     else:
         print("[Info] No high-scoring leads found this run.")
 
+    guest_stats = []
+    try:
+        cg = conn.cursor()
+        for g, n in cg.execute("SELECT guest, COUNT(*) FROM guest_leads GROUP BY guest"):
+            guest_stats.append(f"{g} {n}")
+    except Exception:
+        pass
+
     conn.close()
 
     # Diagnostic summary to owner's TG so silent failures are visible
@@ -1555,6 +1730,8 @@ def run():
                 if v in cnt:
                     cnt[v] += 1
             summary += f"\n\n\U0001F4CA <b>Outcomes</b>: replied {cnt['replied']} | called {cnt['called']} | paid {cnt['paid']}"
+        if guest_stats:
+            summary += "\n\n👥 Guests: " + " | ".join(guest_stats)
         send_tg_message(summary)
     except Exception as e:
         print(f"  [WARN] Summary send failed: {e}", flush=True)

@@ -1,0 +1,11 @@
+[
+  {
+    "name": "GuestName",
+    "bot_token": "123456:AAYourBotFatherToken",
+    "chat_id": "123456789",
+    "email": "guest@example.com",
+    "profile": "Guest profile text: who they are, skills, experience, pricing.",
+    "keywords": ["python", "telegram bot", "ai agent", "automation"],
+    "exclude": ["senior", "director", "vp"]
+  }
+]
