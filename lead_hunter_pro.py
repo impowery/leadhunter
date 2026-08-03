@@ -105,6 +105,13 @@ KEYWORDS = [
     "n8n workflow", "ai automation",
     "english", "english speaking", "english required", "fluent english",
     "english proficiency", "good english",
+    "trading bot", "algorithmic trading", "automated trading", "quant",
+    "e-commerce", "ecommerce", "online store", "shopify",
+    "payment", "payments", "crypto payment", "payment gateway",
+    "dashboard", "alerts", "alert system", "notification",
+    "lead generation", "content automation", "content pipeline",
+    "billing", "subscription", "saas", "mvp",
+    "telegram", "discord bot", "trading", "investment",
 ]
 
 EXCLUDE = [
@@ -189,10 +196,17 @@ def fetch_url(url, timeout=15):
 SPECIFIC_KW = {"n8n", "python", "scraping", "scrape", "scraper", "llm", "chatbot", "telegram bot", "langchain", "rag",
                 "ai agent", "n8n workflow", "selenium", "webhook", "zapier", "make", "low-code", "no-code",
                 "english", "english speaking", "english required", "fluent english",
-                "english proficiency", "good english"}
+                "english proficiency", "good english",
+                "trading bot", "algorithmic trading", "automated trading", "quant",
+                "payment", "crypto payment", "payment gateway", "dashboard",
+                "telegram", "trading", }
 GENERAL_KW = {"freelance", "contract", "consultant", "integration", "bot", "api", "automation",
               "founding engineer", "co-founder", "devops", "analyst", "machine learning",
-              "data pipeline", "etl"}
+              "data pipeline", "etl",
+              "e-commerce", "ecommerce", "online store", "shopify",
+              "alerts", "alert system", "notification", "content automation",
+              "content pipeline", "lead generation", "billing", "subscription", "saas", "mvp",
+              "discord bot", "investment", "fintech", "crypto", "defi", "ai", "gpt"}
 
 def keyword_score(text, allow_senior=False):
     text_lower = text.lower()
@@ -250,13 +264,18 @@ def llm_score(title, description, allow_senior=False):
         "IMPORTANT: Keep reason short. If the title says Senior, Lead, Principal, Director, VP, or Head Of — set score to 0.\n"
     )
     model_prompt = (
-        "You are an expert in AI automation (n8n, Python, scraping, LLM, "
-        "workflow automation, chatbots). Your task is to score a lead for "
-        "relevance. We are looking for: freelance, contract, remote work, "
-        "founding engineer, or consultant opportunities in AI automation.\n"
+        "You are an expert AI scorer for a solo AI product builder profile. "
+        "Perfect matches: telegram bots, trading/quant bots, e-commerce "
+        "automation, payment integrations, dashboards, alert systems, "
+        "content automation, lead generation, n8n/Python/LLM automation, "
+        "crypto/DeFi tooling, MVPs, SaaS tools. We build systems that run "
+        "autonomously, priced on value.\n"
+        "We are looking for: freelance, contract, remote work, founding "
+        "engineer, or consultant opportunities in the above areas. "
+        "Traditional web-backend / enterprise / pure frontend roles score LOW.\n"
         "SPECIAL RULE: If the description explicitly REQUIRES ENGLISH LANGUAGE "
         "(good command of english, fluent english, etc.), score MUST be at least 6 "
-        "— we accept such jobs even outside IT/automation.\n\n"
+        "— we accept such jobs even outside the preferred scope.\n\n"
         "Return ONLY valid JSON with these fields:\n"
         "- score: 0-10 (how relevant this lead is)\n"
         "- type: \"client\" | \"job\" | \"partner\"\n"
