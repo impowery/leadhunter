@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Hunter Pro — AI-ассистент поиска заказчиков</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --bg2: #10162b;
+    --card: #141c36;
+    --border: #223057;
+    --text: #e8edf7;
+    --muted: #8fa0c4;
+    --accent: #4f7cff;
+    --accent2: #22d3ee;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #1b2a55 0%, transparent 60%),
+                radial-gradient(900px 500px at -10% 30%, #14304a 0%, transparent 55%),
+                var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(12px);
+    background: rgba(10, 14, 26, .75);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .logo { font-weight: 800; font-size: 18px; letter-spacing: .3px; }
+  .logo span { color: var(--accent2); }
+  .nav a { color: var(--muted); text-decoration: none; margin-left: 24px; font-size: 14px; }
+  .nav a:hover { color: var(--text); }
+  .btn {
+    display: inline-block; padding: 12px 26px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff; font-weight: 700; text-decoration: none; font-size: 15px;
+    border: none; cursor: pointer; transition: transform .15s, box-shadow .15s;
+    box-shadow: 0 8px 30px rgba(79, 124, 255, .35);
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(34, 211, 238, .4); }
+  .btn.ghost { background: transparent; border: 1px solid var(--border); box-shadow: none; color: var(--text); }
+  .btn.ghost:hover { border-color: var(--accent); }
+
+  .hero { padding: 90px 0 70px; text-align: center; }
+  .badge {
+    display: inline-block; padding: 6px 14px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg2);
+    font-size: 13px; color: var(--muted); margin-bottom: 22px;
+  }
+  .badge b { color: var(--accent2); }
+  h1 { font-size: 52px; line-height: 1.12; letter-spacing: -.5px; margin-bottom: 20px; }
+  h1 .grad {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { font-size: 19px; color: var(--muted); max-width: 720px; margin: 0 auto 36px; }
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .hero-stats {
+    margin-top: 56px; display: flex; justify-content: center; gap: 48px; flex-wrap: wrap;
+  }
+  .hstat { text-align: center; }
+  .hstat .n { font-size: 32px; font-weight: 800; color: var(--accent2); }
+  .hstat .l { font-size: 13px; color: var(--muted); }
+
+  section { padding: 72px 0; }
+  .sec-title { text-align: center; font-size: 34px; letter-spacing: -.3px; margin-bottom: 14px; }
+  .sec-sub { text-align: center; color: var(--muted); max-width: 640px; margin: 0 auto 48px; font-size: 16px; }
+
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; }
+  .step {
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 26px 22px; position: relative;
+  }
+  .step .num {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    font-weight: 800; font-size: 15px; margin-bottom: 16px;
+  }
+  .step h3 { font-size: 17px; margin-bottom: 8px; }
+  .step p { font-size: 14px; color: var(--muted); }
+  .step .tag { margin-top: 14px; font-size: 12px; color: var(--accent2); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .feat {
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 26px 24px; transition: border-color .2s, transform .2s;
+  }
+  .feat:hover { border-color: var(--accent); transform: translateY(-3px); }
+  .feat .ic { font-size: 26px; margin-bottom: 12px; }
+  .feat h3 { font-size: 17px; margin-bottom: 8px; }
+  .feat p { font-size: 14px; color: var(--muted); }
+
+  .lead-card {
+    background: linear-gradient(160deg, #15223f, #10162b);
+    border: 1px solid var(--border); border-radius: 18px;
+    padding: 26px; max-width: 620px; margin: 0 auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
+  }
+  .lead-card .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .lead-card .pick { background: var(--amber); color: #1a1204; font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 8px; }
+  .lead-card .score { color: var(--green); font-weight: 800; }
+  .lead-card h3 { font-size: 18px; margin-bottom: 4px; }
+  .lead-card .src { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .reply {
+    background: #0b1020; border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; font-family: Consolas, monospace; font-size: 12.5px;
+    color: #c8d6f0; white-space: pre-wrap; margin-bottom: 14px;
+  }
+  .contact { font-size: 13px; color: var(--muted); }
+  .contact b { color: var(--accent2); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td, th { padding: 12px 14px; border-bottom: 1px solid var(--border); text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; }
+  td .ok { color: var(--green); } td .no { color: var(--red); }
+  .pipeline { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow-x: auto; }
+
+  .cta-final { text-align: center; padding: 90px 0; }
+  .cta-final h2 { font-size: 36px; margin-bottom: 14px; }
+  .cta-final p { color: var(--muted); margin-bottom: 30px; }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 30px 0 40px;
+    text-align: center; color: var(--muted); font-size: 13px;
+  }
+  footer a { color: var(--accent2); text-decoration: none; }
+  @media (max-width: 720px) {
+    h1 { font-size: 36px; }
+    .nav a { margin-left: 14px; }
+    .sec-title { font-size: 27px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo">Lead Hunter <span>Pro</span></div>
+    <nav>
+      <a href="#how">Как работает</a>
+      <a href="#features">Возможности</a>
+      <a href="#example">Пример</a>
+      <a href="#compare">Сравнение</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="badge">🤖 Работает 24/7 на собственном сервере</div>
+    <h1>Ваш AI-ассистент, который ищет заказчиков и<br>пишет за вас <span class="grad">готовые отклики</span></h1>
+    <p class="sub">Каждые 4 часа сканирует 10+ источников вакансий, отсеивает 95% мусора и присылает в Telegram только тех, кто реально готов платить. С персональным откликом под каждого — вам остаётся один клик.</p>
+    <div class="cta-row">
+      <a class="btn" href="mailto:onlinebis2016@gmail.com?subject=Lead%20Hunter%20Pro">Запустить поиск за меня</a>
+      <a class="btn ghost" href="#example">Посмотреть, как это выглядит</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat"><div class="n">750+</div><div class="l">вакансий за скан</div></div>
+      <div class="hstat"><div class="n">10+</div><div class="l">источников</div></div>
+      <div class="hstat"><div class="n">95%</div><div class="l">мусора отсеивается</div></div>
+      <div class="hstat"><div class="n">24/7</div><div class="l">автономная работа</div></div>
+    </div>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2 class="sec-title">Как это работает</h2>
+    <p class="sec-sub">От потока вакансий до оплаченного заказа — четыре шага, и на каждом из них работают алгоритмы, а не вы.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Сканирование</h3>
+        <p>Парсинг 10+ площадок: WeWorkRemotely, Web3Career, Himalayas, Arbeitnow, Jobicy, RemoteOK, Reddit, Telegram-каналы и другие.</p>
+        <div class="tag">Интервал: 4 часа</div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>AI-скоринг</h3>
+        <p>Профильный LLM оценивает каждую вакансию по вашему профилю: торговые боты, DeFi, e-commerce, Telegram-автоматизация. Score 0–10.</p>
+        <div class="tag">Только ваши темы</div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>Топ-5 откликов</h3>
+        <p>Для сильнейших лидов LLM пишет персональное сообщение на нужном языке: что вы умеете, почему это подходит, ваши контакты.</p>
+        <div class="tag">Максимум 5 за скан</div>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <h3>Трекинг сделок</h3>
+        <p>Отвечаете боту: «replied» → «called» → «paid». Воронка отклик → созвон → заказ видна в статистике каждого скана.</p>
+        <div class="tag">replied → called → paid</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" style="padding-top: 0">
+  <div class="wrap">
+    <h2 class="sec-title">Почему это не ещё один агрегатор вакансий</h2>
+    <p class="sec-sub">Агрегаторы показывают сотни постов. Lead Hunter Pro доставляет пять лучших — с готовым текстом и рабочими контактами.</p>
+    <div class="grid">
+      <div class="feat">
+        <div class="ic">🎯</div>
+        <h3>Профильный скоринг под вас</h3>
+        <p>Настраивается под вашу нишу: AI-боты, DeFi-инфраструктура, e-commerce. «Сеньор-фронтендер в банке» получит 0/10 — и не отвлечёт вас.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">✍️</div>
+        <h3>Готовые отклики</h3>
+        <p>LLM пишет первое сообщение под каждую вакансию: конкретные навыки из профиля, вызов к действию, ваши контакты. RU/EN — по языку вакансии.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">🔓</div>
+        <h3>Обход платных площадок</h3>
+        <p>WeWorkRemotely теперь берёт $14.95/мес за кнопку Apply. Бот находит карьерный портал компании и отдаёт прямую ссылку — отклик бесплатный.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">🌐</div>
+        <h3>100 000+ вакансий web3</h3>
+        <p>Подключён официальный API Web3Career: крипта, DeFi, Solidity, AI-инженерия, Solana. Зарплаты и пометка remote в каждом лиде.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">🖥️</div>
+        <h3>Автономно на вашем VPS</h3>
+        <p>Не облачный сервис — скрипт живёт на вашем сервере, под вашим контролем. Никаких чужих бэкендов между вами и заказчиками.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">📈</div>
+        <h3>Воронка в цифрах</h3>
+        <p>Сколько откликов получило ответ, сколько дошло до созвона, сколько стало заказами. Вы видите, какой источник реально приносит деньги.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="example" style="background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="wrap">
+    <h2 class="sec-title">Как выглядит лид</h2>
+    <p class="sec-sub">Реальное сообщение из Telegram-бота: лид + готовый отклик + контакты. Скопировал — отправил.</p>
+    <div class="lead-card">
+      <div class="top">
+        <span class="pick">🔥 TOP PICK</span>
+        <span class="score">10.0 / 10</span>
+      </div>
+      <h3>Bybit: Blockchain Risk Control Research Intern</h3>
+      <div class="src">WeWorkRemotely · Реалистичный отклик сгенерирован под вас</div>
+      <div class="reply">Hello! I'm an AI product builder with 15+ years in trading and
+a background in DeFi (Hyperliquid, automated trading bots).
+I built trading automation and risk dashboards that run 24/7.
+This role matches my experience in blockchain risk and
+quantitative analysis. My email is below — happy to discuss.</div>
+      <div class="contact">👤 📧 onlinebis2016@gmail.com | 🚀 Отклик напрямую: <b>bybit.com/en/careers</b> · бесплатно, без подписки на площадку</div>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <h2 class="sec-title">Сравнение подходов</h2>
+    <p class="sec-sub">Почему «сидеть на досках вакансий» больше не работает.</p>
+    <div class="pipeline">
+      <table>
+        <thead>
+          <tr><th></th><th>Ручной поиск</th><th>Агрегатор</th><th>Lead Hunter Pro</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Сканирование источников</td><td class="no">✗ Часами</td><td>✓ Автоматически</td><td>✓ Автоматически, 10+ площадок</td></tr>
+          <tr><td>Отсев нерелевантных</td><td class="no">✗ Вручную</td><td class="no">✗ Только фильтры</td><td class="ok">✓ LLM под ваш профиль</td></tr>
+          <tr><td>Персональный отклик</td><td class="no">✗ Один шаблон</td><td class="no">✗ Нет</td><td class="ok">✓ Пишется под каждую вакансию</td></tr>
+          <tr><td>Платные кнопки Apply</td><td class="no">✗ Платите или бросаете</td><td class="no">✗</td><td class="ok">✓ Обход прямой ссылкой на компанию</td></tr>
+          <tr><td>Статистика конверсии</td><td class="no">✗ Нет</td><td class="no">✗ Нет</td><td class="ok">✓ Отклик → созвон → заказ</td></tr>
+          <tr><td>Работает без вас</td><td class="no">✗</td><td class="no">✗</td><td class="ok">✓ 24/7 на вашем сервере</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="cta-final">
+  <div class="wrap">
+    <h2>Начните с недели —<br>и посмотрите, кто сам найдёт вас</h2>
+    <p>Настраиваем под ваш профиль за один день. Платите только когда пойдут заказы.</p>
+    <a class="btn" href="mailto:onlinebis2016@gmail.com?subject=Lead%20Hunter%20Pro%20—%20запуск">Написать: onlinebis2016@gmail.com</a>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    Lead Hunter Pro · AI Product Builder · <a href="mailto:onlinebis2016@gmail.com">onlinebis2016@gmail.com</a>
+  </div>
+</footer>
+
+</body>
+</html>
