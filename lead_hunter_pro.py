@@ -1220,10 +1220,12 @@ def decorate_wwr_links(lead):
 
 
 def send_applications(leads):
-    """Send ready-to-copy reply + contacts for every lead with score >= 6."""
-    for l in leads:
-        if l.get("score", 0) < 6:
-            continue
+    """Send ready-to-copy reply for top leads: score >= 8, max 5 per scan."""
+    candidates = sorted(
+        [l for l in leads if l.get("score", 0) >= 8],
+        key=lambda x: x.get("score", 0), reverse=True,
+    )[:5]
+    for l in candidates:
         reply = generate_application(l)
         if not reply:
             print(f"  [App] No reply generated for: {l['title'][:60]}", flush=True)
