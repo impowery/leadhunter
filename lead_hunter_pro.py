@@ -598,6 +598,59 @@ def parse_jobicy():
     return leads
 
 
+WEB3CAREER_TOKEN = os.getenv("WEB3CAREER_TOKEN", "")
+WEB3CAREER_TAGS = ["ai", "defi", "full-stack", "backend", "python", "crypto"]
+
+
+def parse_web3career():
+    print("[Web3Career] Fetching...")
+    if not WEB3CAREER_TOKEN:
+        print("  [WARN] no WEB3CAREER_TOKEN set, skipping")
+        return []
+    leads = []
+    seen_urls = set()
+    for tag in WEB3CAREER_TAGS:
+        try:
+            params = {
+                "token": WEB3CAREER_TOKEN,
+                "tag": tag,
+                "remote": "true",
+                "limit": 100,
+                "show_description": "true",
+            }
+            resp = requests.get("https://web3.career/api/v1", params=params, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, list):
+                continue
+            jobs = next((item for item in data if isinstance(item, list)), None)
+            if not jobs:
+                jobs = data if (data and isinstance(data[0], dict)) else []
+            for job in jobs:
+                if not isinstance(job, dict):
+                    continue
+                title = str(job.get("title", "") or "").strip()
+                url = str(job.get("apply_url", "") or "").strip()
+                if not title or not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                desc_raw = str(job.get("description", "") or "")
+                desc = re.sub(r"<[^>]+>", " ", desc_raw)
+                desc = re.sub(r"\s+", " ", html.unescape(desc)).strip()[:800]
+                tags = str(job.get("tags", "") or "")
+                desc = f"{desc} {tags[:200]}"[:800]
+                lead = {"title": title[:200], "url": url, "source": "Web3Career",
+                        "description": desc, "apply_links": [url]}
+                company = str(job.get("company", "") or "").strip()
+                if company:
+                    lead["company"] = company
+                leads.append(lead)
+        except Exception as e:
+            print(f"  [WARN] Web3Career tag={tag} error: {e}")
+    print(f"  {len(leads)} leads")
+    return leads
+
+
 def parse_reddit_forhire():
     print("[Reddit] Fetching r/forhire...")
     import time as _time
@@ -1188,6 +1241,8 @@ def run():
     all_raw.extend(parse_arbeitnow())
     print("[DBG] parse_jobicy...", flush=True)
     all_raw.extend(parse_jobicy())
+    print("[DBG] parse_web3career...", flush=True)
+    all_raw.extend(parse_web3career())
     print("[DBG] parse_jobsdb...", flush=True)
     all_raw.extend(parse_jobsdb())
 
