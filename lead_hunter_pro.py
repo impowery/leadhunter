@@ -1041,9 +1041,9 @@ def extract_contact(lead):
 
 
 def send_applications(leads):
-    """Send ready-to-copy reply + contacts for every lead with score >= 8."""
+    """Send ready-to-copy reply + contacts for every lead with score >= 6."""
     for l in leads:
-        if l.get("score", 0) < 8:
+        if l.get("score", 0) < 6:
             continue
         reply = generate_application(l)
         if not reply:
