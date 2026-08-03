@@ -507,9 +507,24 @@ def parse_wwr():
             title = child("title")
             url = child("link") or child("guid")
             desc = child("description")
+            apply_links = []
+            if desc:
+                for lnk in re.findall(r'href="(https?://[^"]+)"', desc):
+                    if re.search(
+                        r"weworkremotely\.com|facebook\.com|twitter\.com|x\.com|"
+                        r"linkedin\.com|youtube\.com|instagram\.com|cloudfront|"
+                        r"schema\.org|w3\.org|googleapis\.com",
+                        lnk,
+                    ):
+                        continue
+                    if lnk not in apply_links:
+                        apply_links.append(lnk)
             if title and url:
-                leads.append({"title": title[:200], "url": url, "source": "WeWorkRemotely",
-                              "description": (desc or "")[:800]})
+                lead = {"title": title[:200], "url": url, "source": "WeWorkRemotely",
+                        "description": (desc or "")[:800]}
+                if apply_links:
+                    lead["apply_links"] = apply_links[:3]
+                leads.append(lead)
     except Exception as e:
         print(f"  [WARN] WWR RSS error: {e}")
     print(f"  {len(leads)} leads")
@@ -1037,6 +1052,9 @@ def extract_contact(lead):
         contact.append(f"@{m.group(1)}")
     if lead.get("url"):
         contact.append(f"🔗 {lead.get('url', '')[:200]}")
+    for lnk in (lead.get("apply_links") or [])[:2]:
+        if lnk != lead.get("url"):
+            contact.append(f"🚀 Отклик напрямую: {lnk[:200]}")
     return " | ".join(contact) or "⚠️ контакт не найден — см. ссылку/описание"
 
 
