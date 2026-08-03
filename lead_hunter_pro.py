@@ -810,6 +810,110 @@ def send_tg_message(text):
         print(f"  [WARN] TG send failed: {e}")
 
 
+PROFILE_TEXT = """Andrey Mashkin: AI Product Builder, Bangkok (remote worldwide).
+- Solo builder, 15+ years in trading & investments (equities, FX, commodities, crypto).
+- Built TradeMind Lite: AI trading journal Telegram bot with crypto payments (Plisio).
+- Runs 6 algorithmic trading bots (gold, BTC, oil, altcoins) on a small VPS with zero downtime: self-healing health checks, cron dashboards, instant Telegram alerts.
+- DeFi trading infrastructure on Hyperliquid and other top DEXs: partial-close accounting, fees optimization, crash recovery.
+- Tech: Python, Telegram Bot API, Cloudflare Workers, OpenRouter (various models), n8n, scraping, VPS/Linux, cron, HTML/CSS/JS.
+- E-commerce automation: logic, orders, payments.
+- Pricing: systems that run without me, priced on value, not hours.
+- Contact: onlinebis2016@gmail.com."""
+
+
+def generate_application(lead):
+    """Generate a short personalized reply for the given lead (score >= 8)."""
+    try:
+        title = lead.get("title", "")
+        desc = (lead.get("description") or title)[:1000]
+        aspects = ", ".join(lead.get("matched_aspects", [])[:6]) or "none"
+        lang = "RU" if re.search(r"[а-яё]", desc) else "EN"
+        prompt = (
+            "You are an AI assistant writing the FIRST message from a freelance AI product builder "
+            "applying to a job/project. Use the profile below.\n\n"
+            f"{PROFILE_TEXT}\n\n"
+            f"Job title: {title}\n"
+            f"Job description: {desc}\n"
+            f"Relevant aspects: {aspects}\n\n"
+            f"Write a short reply message ({'in Russian' if lang == 'RU' else 'in English'}), "
+            "3-6 sentences max, plain text, no markdown, no signature. "
+            "PERSONAL: mention 1-2 concrete skills from the profile that directly match this exact job. "
+            "End with a call to action (e.g. 'Happy to discuss, my email is below'). "
+            "Do NOT invent experience. Return ONLY the message text."
+        )
+        for client, model in [
+            (or_client, "qwen/qwen3.7-flash"),
+            (or_client2, "qwen/qwen3.7-flash"),
+            (groq_client, "llama-3.3-70b-versatile"),
+        ]:
+            if client is None:
+                continue
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You write short, natural, personalized job-application replies."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.4,
+                    max_tokens=250,
+                    timeout=20,
+                )
+                raw = (resp.choices[0].message.content or "").strip()
+                if raw:
+                    return raw[:1500]
+            except Exception as e:
+                print(f"  [WARN] App-gen failed ({model}): {e}", flush=True)
+    except Exception:
+        pass
+    return None
+
+
+def extract_contact(lead):
+    """Pull email / tg-username / link out of a lead for manual reply."""
+    txt = " ".join([
+        lead.get("title", ""),
+        lead.get("description", "") or "",
+        lead.get("url", ""),
+    ])
+    contact = []
+    m = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", txt)
+    if m:
+        contact.append(f"📧 {m.group(0)}")
+    m = re.search(r"t\.me/([A-Za-z0-9_]+)", txt)
+    if m:
+        contact.append(f"✈️ t.me/{m.group(1)}")
+    m = re.search(r"@([A-Za-z0-9_]{4,})", txt)
+    if m:
+        contact.append(f"@{m.group(1)}")
+    if lead.get("url"):
+        contact.append(f"🔗 {lead.get('url', '')[:200]}")
+    return " | ".join(contact) or "⚠️ контакт не найден — см. ссылку/описание"
+
+
+def send_applications(leads):
+    """Send ready-to-copy reply + contacts for every lead with score >= 8."""
+    for l in leads:
+        if l.get("score", 0) < 8:
+            continue
+        reply = generate_application(l)
+        if not reply:
+            print(f"  [App] No reply generated for: {l['title'][:60]}", flush=True)
+            continue
+        title = l["title"][:70].replace("#", "")
+        contact = extract_contact(l)
+        msg = (
+            f"\U0001F4DD <b>Ответ (score {l.get('score', 0)}/10)</b>\n"
+            f"\u2500 {title}\n\n"
+            f"<code>{html.escape(reply)}</code>\n\n"
+            f"👤 {html.escape(contact)}\n"
+            f"Источник: {l.get('source', '?')}"
+        )
+        send_tg_message(msg)
+        print(f"[App] reply sent for: {title[:60]}", flush=True)
+        time.sleep(0.5)
+
+
 def leads_to_tg(leads):
     if not leads:
         return
@@ -1031,6 +1135,7 @@ def run():
     if high_scored:
         print_console(high_scored)
         leads_to_tg(high_scored)
+        send_applications(high_scored)
         # Save hashes of sent leads to avoid re-sending after redeploy
         with open(sent_file, "a", encoding="utf-8") as f:
             for l in high_scored:
