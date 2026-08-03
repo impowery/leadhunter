@@ -1,5 +1,6 @@
 *.session
 *.db
 .env
+guests.json
 data/
 __pycache__/
