@@ -59,6 +59,13 @@ TG_API_ID = int(os.getenv("TG_API_ID", "0"))
 TG_API_HASH = os.getenv("TG_API_HASH", "")
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "")
+GUEST_BOTS = []
+for _pair in (os.getenv("GUEST_BOTS", "") or "").split(","):
+    _pair = _pair.strip()
+    if ":" in _pair:
+        _tok, _chat = _pair.split(":", 1)
+        if _tok.strip() and _chat.strip():
+            GUEST_BOTS.append((_tok.strip(), _chat.strip()))
 TG_SESSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lead_hunter.session")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -942,6 +949,17 @@ def send_tg_message(text):
         }, timeout=10)
     except Exception as e:
         print(f"  [WARN] TG send failed: {e}")
+    for tok, chat in GUEST_BOTS:
+        try:
+            url = f"https://api.telegram.org/bot{tok}/sendMessage"
+            requests.post(url, json={
+                "chat_id": chat,
+                "text": text[:4000],
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
+            }, timeout=10)
+        except Exception as e:
+            print(f"  [WARN] Guest bot send failed: {e}")
 
 
 OUTCOME_FILE = os.path.join(DATA_DIR, "outcomes.json")
