@@ -897,6 +897,10 @@ def run():
 
     print(f"[Raw] Total leads collected: {len(all_raw)}", flush=True)
 
+    # Per-source collection stats (for the end-of-scan TG summary)
+    from collections import Counter
+    raw_by_source = Counter(l.get("source", "?") for l in all_raw)
+
     # Pre-dedup: skip scoring leads already known in local DB or Supabase
     known_urls = set()
     try:
@@ -1030,6 +1034,24 @@ def run():
         print("[Info] No high-scoring leads found this run.")
 
     conn.close()
+
+    # Diagnostic summary to owner's TG so silent failures are visible
+    try:
+        src_lines = []
+        for name in sorted(set(list(raw_by_source) + [s.get("source", "?") for s in scored])):
+            raw_n = raw_by_source.get(name, 0)
+            scored_n = sum(1 for s in scored if s.get("source") == name)
+            src_lines.append(f"{name}: raw={raw_n} scored={scored_n}")
+        summary = (
+            f"\U0001F4CB <b>Scan summary</b> {datetime.now().strftime('%m-%d %H:%M')}\n"
+            + "\u2500" * 25 + "\n"
+            + "\n".join(src_lines)
+            + f"\n\nNew: {len(all_raw)} | dedup-skipped: {skipped} | sent: {len(high_scored)}"
+        )
+        send_tg_message(summary)
+    except Exception as e:
+        print(f"  [WARN] Summary send failed: {e}", flush=True)
+
     return high_scored
 
 
