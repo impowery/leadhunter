@@ -492,27 +492,93 @@ def parse_remote_co():
 
 
 def parse_wwr():
-    print("[WeWorkRemotely] Fetching...")
-    html_text = fetch_url("https://weworkremotely.com")
-    if not html_text:
+    print("[WeWorkRemotely] Fetching RSS...")
+    raw = fetch_url("https://weworkremotely.com/remote-jobs.rss")
+    if not raw:
         return []
     leads = []
-    for match in re.finditer(
-        r'<a[^>]*href="(/remote-jobs/[^"]+)"[^>]*>(.*?)</a>',
-        html_text, re.DOTALL
-    ):
-        href = match.group(1)
-        if not href.startswith("/remote-jobs/find-your-plan"):
-            url = "https://weworkremotely.com" + href if href.startswith("/") else href
-            inner = match.group(2)
-            tm = re.search(r'class="[^"]*new-listing__header__title__text[^"]*"[^>]*>([^<]+)', inner)
-            title = html.unescape(tm.group(1)).strip() if tm else ""
-            if not title:
-                plain = re.sub(r"<[^>]+>", " ", inner).strip()
-                title = html.unescape(re.sub(r"\s+", " ", plain)).strip()
-            if title and len(title) > 3:
-                if not any(t["url"] == url for t in leads):
-                    leads.append({"title": title[:200], "url": url, "source": "WeWorkRemotely"})
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(raw)
+        for item in root.findall(".//item"):
+            def child(tag):
+                el = item.find(tag)
+                return (el.text or "").strip() if el is not None and el.text else ""
+            title = child("title")
+            url = child("link") or child("guid")
+            desc = child("description")
+            if title and url:
+                leads.append({"title": title[:200], "url": url, "source": "WeWorkRemotely",
+                              "description": (desc or "")[:800]})
+    except Exception as e:
+        print(f"  [WARN] WWR RSS error: {e}")
+    print(f"  {len(leads)} leads")
+    return leads
+
+
+def parse_himalayas():
+    print("[Himalayas] Fetching...")
+    raw = fetch_url("https://himalayas.app/jobs/api?limit=30")
+    if not raw:
+        return []
+    leads = []
+    try:
+        data = json.loads(raw)
+        for job in data.get("jobs", [])[:30]:
+            title = job.get("title", "")
+            url = job.get("applyUrl", "") or job.get("url", "") or job.get("slug", "")
+            desc = " ".join([
+                str(job.get("excerpt", "") or ""),
+                " ".join(job.get("categories", [])) if isinstance(job.get("categories"), list) else str(job.get("categories", "")),
+            ])
+            if title:
+                leads.append({"title": title[:200], "url": url, "source": "Himalayas",
+                              "description": desc[:800]})
+    except Exception as e:
+        print(f"  [WARN] Himalayas error: {e}")
+    print(f"  {len(leads)} leads")
+    return leads
+
+
+def parse_arbeitnow():
+    print("[Arbeitnow] Fetching...")
+    raw = fetch_url("https://arbeitnow.com/api/job-board-api?limit=30")
+    if not raw:
+        return []
+    leads = []
+    try:
+        data = json.loads(raw)
+        for job in data.get("data", [])[:30]:
+            title = job.get("title", "")
+            url = job.get("url", "")
+            tags = job.get("tags", [])
+            desc = job.get("description", "") or ""
+            if title:
+                leads.append({"title": title[:200], "url": url, "source": "Arbeitnow",
+                              "description": (desc + " " + " ".join(tags))[:800]})
+    except Exception as e:
+        print(f"  [WARN] Arbeitnow error: {e}")
+    print(f"  {len(leads)} leads")
+    return leads
+
+
+def parse_jobicy():
+    print("[Jobicy] Fetching...")
+    raw = fetch_url("https://jobicy.com/api/v2/remote-jobs?count=30")
+    if not raw:
+        return []
+    leads = []
+    try:
+        data = json.loads(raw)
+        for job in data.get("jobs", [])[:30]:
+            title = job.get("jobTitle", "")
+            url = job.get("url", "")
+            desc = " ".join([str(job.get("jobExcerpt", "") or ""), str(job.get("jobDescription", "") or "")])
+            if title:
+                leads.append({"title": title[:200], "url": url, "source": "Jobicy",
+                              "description": desc[:800]})
+    except Exception as e:
+        print(f"  [WARN] Jobicy error: {e}")
     print(f"  {len(leads)} leads")
     return leads
 
@@ -1015,6 +1081,12 @@ def run():
     all_raw.extend(parse_remote_co())
     print("[DBG] parse_wwr...", flush=True)
     all_raw.extend(parse_wwr())
+    print("[DBG] parse_himalayas...", flush=True)
+    all_raw.extend(parse_himalayas())
+    print("[DBG] parse_arbeitnow...", flush=True)
+    all_raw.extend(parse_arbeitnow())
+    print("[DBG] parse_jobicy...", flush=True)
+    all_raw.extend(parse_jobicy())
     print("[DBG] parse_jobsdb...", flush=True)
     all_raw.extend(parse_jobsdb())
 
