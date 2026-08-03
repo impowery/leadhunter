@@ -119,16 +119,13 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 TELEGRAM_SOURCES = [
-    {"name": "freelance_work", "url": "https://t.me/freelance_work"},
-    {"name": "remotejobschannel", "url": "https://t.me/remotejobschannel"},
-    {"name": "python_jobs", "url": "https://t.me/python_jobs"},
-    {"name": "freelancetoday", "url": "https://t.me/freelancetoday"},
     {"name": "remote_python_jobs", "url": "https://t.me/remote_python_jobs"},
     {"name": "pythonpythonjobs", "url": "https://t.me/pythonpythonjobs"},
     {"name": "forpython", "url": "https://t.me/forpython"},
     {"name": "job_python", "url": "https://t.me/job_python"},
     {"name": "pydevjob", "url": "https://t.me/pydevjob"},
     {"name": "python_djangojobs", "url": "https://t.me/python_djangojobs"},
+    {"name": "remotejobs", "url": "https://t.me/remotejobs"},
     {"name": "jobstash", "url": "https://t.me/jobstash"},
     {"name": "workingincrypto", "url": "https://t.me/workingincrypto"},
     {"name": "cryptoheadhunter", "url": "https://t.me/cryptoheadhunter"},
@@ -326,6 +323,7 @@ def parse_jobsdb(max_pages=4, fetch_desc=True):
         t = fetch_url(url, timeout=25)
         if not t:
             print(f"  [WARN] JobsDB page {page} failed", flush=True)
+            time.sleep(2)
             continue
         chunks = t.split('data-testid="job-card"')
         n = 0
@@ -351,6 +349,7 @@ def parse_jobsdb(max_pages=4, fetch_desc=True):
     if fetch_desc and leads:
         print(f"  [JobsDB] Fetching descriptions for {len(leads)} jobs...", flush=True)
         for i, l in enumerate(leads):
+            time.sleep(1.5)  # rate-limit protection (JobsDB bans fast bursts)
             try:
                 t = fetch_url(l["url"], timeout=20)
                 if t:
@@ -480,15 +479,21 @@ def parse_wwr():
         return []
     leads = []
     for match in re.finditer(
-        r'<a[^>]*href="(/remote-jobs/[^"]+)"[^>]*>\s*([^<]+)',
+        r'<a[^>]*href="(/remote-jobs/[^"]+)"[^>]*>(.*?)</a>',
         html_text, re.DOTALL
     ):
         href = match.group(1)
         if not href.startswith("/remote-jobs/find-your-plan"):
             url = "https://weworkremotely.com" + href if href.startswith("/") else href
-            title = html.unescape(match.group(2)).strip()
+            inner = match.group(2)
+            tm = re.search(r'class="[^"]*new-listing__header__title__text[^"]*"[^>]*>([^<]+)', inner)
+            title = html.unescape(tm.group(1)).strip() if tm else ""
+            if not title:
+                plain = re.sub(r"<[^>]+>", " ", inner).strip()
+                title = html.unescape(re.sub(r"\s+", " ", plain)).strip()
             if title and len(title) > 3:
-                leads.append({"title": title, "url": url, "source": "WeWorkRemotely"})
+                if not any(t["url"] == url for t in leads):
+                    leads.append({"title": title[:200], "url": url, "source": "WeWorkRemotely"})
     print(f"  {len(leads)} leads")
     return leads
 
