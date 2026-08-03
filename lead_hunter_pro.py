@@ -1108,7 +1108,115 @@ def extract_contact(lead):
     for lnk in (lead.get("apply_links") or [])[:2]:
         if lnk != lead.get("url"):
             contact.append(f"🚀 Отклик напрямую: {lnk[:200]}")
+    if lead.get("wwr_paid_only"):
+        contact.append("⚠️ отклик только через WWR (платный)")
     return " | ".join(contact) or "⚠️ контакт не найден — см. ссылку/описание"
+
+
+_CAREERS_CACHE = {}
+_KNOWN_CAREERS = {
+    "dropbox": ["https://www.dropbox.jobs/en/"],
+    "tether": ["https://careers.tether.io/"],
+    "bybit": ["https://www.bybit.com/en/careers"],
+    "platform.sh": ["https://platform.sh/careers"],
+    "fin": ["https://fin.ai/"],
+}
+
+
+def extract_company_name(title):
+    """'Bybit: Blockchain Risk Control Intern' -> 'Bybit'"""
+    m = re.match(r"^([^:]{2,40}):\s", title or "")
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"\bat\s+([A-Za-z0-9.\- ]{2,30})$", title or "")
+    if m:
+        return m.group(1).strip()
+    return (title or "").split()[0][:30]
+
+
+def careers_candidates(company):
+    """Candidate direct-apply URLs for a company name."""
+    base = re.sub(r"[^a-z0-9.\-]", "", company.lower())
+    if "." in base:
+        domain = base
+    else:
+        domain = base + ".com"
+    domain = domain.strip(".-")
+    return [
+        f"https://{domain}/careers",
+        f"https://careers.{domain}",
+        f"https://{domain}/company/careers",
+        f"https://{domain}/jobs",
+        f"https://www.careers.{domain}",
+    ]
+
+
+def url_alive(url):
+    """True if page loads and looks like a careers/jobs page."""
+    try:
+        resp = requests.get(url, timeout=8, allow_redirects=True,
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0"})
+        if resp.status_code >= 400:
+            return False
+        text = resp.text[:30000].lower()
+        if "career" in text or "job" in text or "open position" in text or "vacan" in text:
+            return True
+        return len(text) > 500
+    except Exception:
+        return False
+
+
+def find_careers_links(company):
+    """Find a company's careers page: known map, guess domains, then DuckDuckGo fallback."""
+    if not company:
+        return []
+    if company in _CAREERS_CACHE:
+        return _CAREERS_CACHE[company]
+    result = []
+    for known, links in _KNOWN_CAREERS.items():
+        if known in company.lower():
+            result = list(links)
+            break
+    if not result:
+        for cand in careers_candidates(company):
+            if url_alive(cand):
+                result = [cand]
+                break
+    if not result:
+        try:
+            q = requests.get(
+                f"https://html.duckduckgo.com/html/?q={requests.utils.quote(company + ' careers jobs')}",
+                timeout=10,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0"},
+            )
+            links = re.findall(r'class="result__a"[^>]*href="([^"]+)"', q.text)
+            for lnk in links:
+                m = re.search(r"(https?://[^&]+)", lnk)
+                if not m:
+                    continue
+                cand = m.group(1).replace("uddg=", "")
+                if cand.startswith("http") and url_alive(cand):
+                    result = [cand]
+                    break
+        except Exception:
+            pass
+    _CAREERS_CACHE[company] = result
+    return result
+
+
+def decorate_wwr_links(lead):
+    """For WWR leads without direct apply links: find company careers page,
+    else mark as paid-only (WWR apply button is Pro-only)."""
+    if lead.get("source") != "WeWorkRemotely" or lead.get("apply_links") or lead.get("wwr_paid_only"):
+        return
+    company = extract_company_name(lead.get("title", ""))
+    links = find_careers_links(company)
+    if links:
+        lead["apply_links"] = [lnk for lnk in links if lnk != lead.get("url")][:2]
+        if not lead["apply_links"]:
+            lead.pop("apply_links", None)
+    if not lead.get("apply_links"):
+        lead["wwr_paid_only"] = True
 
 
 def send_applications(leads):
@@ -1120,6 +1228,7 @@ def send_applications(leads):
         if not reply:
             print(f"  [App] No reply generated for: {l['title'][:60]}", flush=True)
             continue
+        decorate_wwr_links(l)
         title = l["title"][:70].replace("#", "")
         contact = extract_contact(l)
         msg = (
@@ -1210,6 +1319,25 @@ def leads_to_tg(leads):
     for c in chunks:
         send_tg_message(c)
         time.sleep(0.5)
+
+
+def send_wwr_direct_links(leads):
+    """For WWR leads: ensure direct apply links (or paid-only note) and
+    notify once for leads that got a new direct link."""
+    for l in leads:
+        if l.get("source") != "WeWorkRemotely":
+            continue
+        had = bool(l.get("apply_links")) or l.get("wwr_paid_only")
+        decorate_wwr_links(l)
+        if had:
+            continue
+        contact = extract_contact(l)
+        if contact and ("🚀 Отклик напрямую" in contact or "⚠️" in contact):
+            title = l["title"][:70].replace("#", "")
+            send_tg_message(
+                f"\u2705 <b>WWR apply info</b>\n\u2500 {title}\n\n{contact}"
+            )
+            time.sleep(0.5)
 
 
 def run():
