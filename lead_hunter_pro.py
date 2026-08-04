@@ -169,6 +169,12 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
+    # migration: description column (used to regenerate applications later)
+    try:
+        c.execute("ALTER TABLE leads ADD COLUMN description TEXT")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
     conn.commit()
 
     if HAS_SUPABASE:
@@ -844,8 +850,8 @@ def store_leads(conn, results):
         try:
             c.execute(
                 """INSERT OR IGNORE INTO leads
-                   (title, source, url, score, type, urgency, budget, matched_aspects, reason)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (title, source, url, score, type, urgency, budget, matched_aspects, reason, description)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     r["title"],
                     r["source"],
@@ -856,6 +862,7 @@ def store_leads(conn, results):
                     json.dumps(r.get("budget_indicated", False)),
                     json.dumps(r.get("matched_aspects", [])),
                     r.get("reason", ""),
+                    r.get("description", ""),
                 )
             )
             if c.rowcount:
@@ -1179,8 +1186,146 @@ def record_outcome(url, status):
     send_tg_message(f"\U0001F4C8 <b>Outcome</b>: <code>{status}</code> for {url[:60]}")
 
 
+def short_url(url):
+    u = url.replace("https://", "").replace("http://", "")
+    return u[:50] + ".." if len(u) > 50 else u
+
+
+def build_queue(conn):
+    """All leads sent to TG (sent=1, score>=6) that have no outcome yet,
+    sorted by score desc, then title. Used for digest + interactive commands."""
+    oc = load_outcomes()
+    cur = conn.cursor()
+    rows = cur.execute(
+        "SELECT title, source, url, score, matched_aspects, reason, description "
+        "FROM leads WHERE sent=1 AND score >= 6"
+    ).fetchall()
+    q = []
+    for title, source, url, score, aspects, reason, desc in rows:
+        if not url or url in oc:
+            continue
+        q.append({
+            "title": title,
+            "source": source,
+            "url": url,
+            "score": score,
+            "matched_aspects": json.loads(aspects) if aspects else [],
+            "reason": reason or "",
+            "description": desc or "",
+        })
+    q.sort(key=lambda l: (-l.get("score", 0), l["title"]))
+    return q
+
+
+def prioritize_leads(leads):
+    """LLM batch: tag each lead 'today' / 'week' / 'skip'."""
+    tags = {}
+    if not leads:
+        return tags
+    chunk = 40
+    for i in range(0, len(leads), chunk):
+        part = leads[i:i + chunk]
+        lines = []
+        for idx, l in enumerate(part, 1):
+            lines.append(f"{idx}. [{l.get('source','?')}] {l['title'][:100]} (score {l.get('score',0)})")
+        prompt = (
+            "You are a busy freelance AI product builder. Your ideal work: telegram bots, trading/quant bots, "
+            "e-commerce automation, payment integrations, dashboards, alert systems, content automation, "
+            "lead generation, n8n/Python/LLM automation, crypto/DeFi tooling, MVPs, SaaS tools. "
+            "For each lead below decide: 'today' = strong match, reply ASAP; 'week' = decent, reply within a week; "
+            "'skip' = weak, spammy, senior role, or not a fit.\n\n"
+            "Return ONLY a JSON object mapping number to tag, e.g. {\"1\": \"today\", \"2\": \"skip\"}.\n\n"
+            + "\n".join(lines)
+        )
+        raw = llm_complete(
+            "You classify freelance job leads into today/week/skip.",
+            prompt, max_tokens=800, temperature=0.1, timeout=45,
+        )
+        parsed = {}
+        if raw:
+            try:
+                parsed = extract_json(raw)
+            except Exception:
+                print(f"  [WARN] prio bad JSON: {raw[:200]}", flush=True)
+        for idx, l in enumerate(part, 1):
+            t = str(parsed.get(str(idx), "week")).lower()
+            if t not in ("today", "week", "skip"):
+                t = "week"
+            tags[l["url"]] = t
+    return tags
+
+
+def format_queue_lead(i, l, with_url=True):
+    score = l.get("score", 0)
+    aspects = ", ".join(a.lstrip("#").strip() for a in (l.get("matched_aspects") or []) if a.strip())
+    msg = f"{i}. ⭐<b>{score}/10</b> [{l.get('source','?')}] <b>{l['title'][:90].replace('#','')}</b>"
+    if aspects:
+        msg += f"\n    🏷 {aspects[:120]}"
+    if l.get("reason"):
+        msg += f"\n    💬 {l['reason'][:120]}"
+    if with_url and l.get("url"):
+        msg += f"\n    🔗 <a href=\"{l['url']}\">{short_url(l['url'])}</a>"
+    return msg
+
+
+def send_digest(conn):
+    """One consolidated digest of all unanswered leads: TOP-5 with ready
+    applications, then prioritized lists (today / week / skip)."""
+    q = build_queue(conn)
+    if not q:
+        send_tg_message("✅ Очередь пуста — все отправленные лиды обработаны!")
+        return
+    tags = prioritize_leads(q)
+    today = [l for l in q if tags.get(l["url"]) == "today"]
+    week = [l for l in q if tags.get(l["url"]) == "week"]
+    skip = [l for l in q if tags.get(l["url"]) == "skip"]
+
+    send_tg_message(
+        f"📋 <b>Digest</b>: всего {len(q)} | 🔥 today {len(today)} | 📅 week {len(week)} | ⏭ skip {len(skip)}\n"
+        f"Формат: d10 / app N / skip N / next"
+    )
+
+    top = sorted(today, key=lambda l: -l.get("score", 0))[:5]
+    if top:
+        chunks = [f"🔥 <b>ОТВЕТИТЬ СЕГОДНЯ — ТОП {len(top)}</b>\n" + "─" * 25]
+        for i, l in enumerate(top, 1):
+            reply = generate_application(l, email="onlinebis2016@gmail.com")
+            contact = extract_contact(l)
+            chunks.append(
+                f"\n<b>{i}. {l['title'][:90].replace('#','')}</b> [{l.get('source','?')}] ⭐{l.get('score',0)}/10\n"
+                f"<code>{html.escape(reply or '(не сгенерирован)')}</code>\n"
+                f"👤 {html.escape(contact)}\n"
+                f"🏷 {', '.join((l.get('matched_aspects') or [])[:6])}"
+            )
+        send_tg_message("\n".join(chunks))
+
+    def group_msg(leads, header):
+        if not leads:
+            return None
+        msg = f"{header} ({len(leads)})\n" + "─" * 25 + "\n"
+        for i, l in enumerate(leads, 1):
+            msg += f"\n{format_queue_lead(i, l)}"
+            if len(msg) > 3000:
+                send_tg_message(msg)
+                msg = f"{header} (продолжение)\n" + "─" * 25 + "\n"
+        return msg or None
+
+    m = group_msg(today[5:], f"📅 <b>ЕЩЁ СЕГОДНЯ (остальные)</b>")
+    if m:
+        send_tg_message(m)
+    m = group_msg(week, f"⏳ <b>НА ЭТОЙ НЕДЕЛЕ</b>")
+    if m:
+        send_tg_message(m)
+    if skip:
+        send_tg_message(f"⏭ <b>ПРОПУСТИТЬ</b> ({len(skip)}):\n" + "\n".join(
+            f"· {l['title'][:60]}" for l in skip[:15]))
+
+
 def tg_poll_outcomes():
-    """Daemon: watch owner's replies to our TG messages; update lead outcomes."""
+    """Daemon: watch owner's messages in TG.
+    - Reply with replied/called/paid -> outcome for that lead.
+    - Plain commands: d10 / app N / skip N / next / digest / queue / help.
+    """
     last_update_id = 0
     commands = {
         "replied": "replied",
@@ -1206,19 +1351,100 @@ def tg_poll_outcomes():
                 if not msg:
                     continue
                 text = (msg.get("text") or "").strip().lower()
-                if text not in commands:
+                if not text:
                     continue
                 reply = msg.get("reply_to_message")
-                if not reply:
-                    send_tg_message("Скинь ответом на сообщение с лидом (Reply), например: replied / called / paid")
+
+                if text in commands:
+                    if not reply:
+                        send_tg_message("Скинь ответом на сообщение с лидом (Reply), например: replied / called / paid")
+                        continue
+                    orig = reply.get("text") or ""
+                    m = re.search(r"https?://[^\s>]+", orig)
+                    if not m:
+                        send_tg_message("Не нашёл ссылку в сообщении, на которое ты ответил")
+                        continue
+                    lead_url = m.group(0).rstrip(">").rstrip(".")
+                    record_outcome(lead_url, commands[text])
                     continue
-                orig = reply.get("text") or ""
-                m = re.search(r"https?://[^\s>]+", orig)
-                if not m:
-                    send_tg_message("Не нашёл ссылку в сообщении, на которое ты ответил")
+
+                # ---- interactive queue commands (plain messages) ----
+                if text in ("help", "/help", "помощь"):
+                    send_tg_message(
+                        "📖 <b>Команды</b>\n"
+                        "• <code>digest</code> — сводка всех неотвеченных лидов\n"
+                        "• <code>d10</code> — топ-10 очереди\n"
+                        "• <code>app N</code> — готовый отклик на лид №N\n"
+                        "• <code>skip N</code> — пропустить лид №N\n"
+                        "• <code>next</code> — следующий лид с откликом\n"
+                        "• <code>queue</code> — сколько лидов в очереди\n"
+                        "• reply <code>replied/called/paid</code> на лид — отметить результат"
+                    )
                     continue
-                lead_url = m.group(0).rstrip(">").rstrip(".")
-                record_outcome(lead_url, commands[text])
+                if text in ("digest", "дайджест"):
+                    try:
+                        c = sqlite3.connect(DB_PATH)
+                        send_digest(c)
+                        c.close()
+                    except Exception as e:
+                        print(f"  [WARN] digest failed: {e}", flush=True)
+                        send_tg_message(f"⚠️ digest failed: {e}")
+                    continue
+                if text in ("queue", "очередь"):
+                    try:
+                        c = sqlite3.connect(DB_PATH)
+                        n = len(build_queue(c))
+                        c.close()
+                        send_tg_message(f"📋 В очереди неотвеченных: {n}")
+                    except Exception as e:
+                        print(f"  [WARN] queue failed: {e}", flush=True)
+                    continue
+                if text == "d10" or text == "next" or text.startswith(("app ", "skip ")):
+                    try:
+                        c = sqlite3.connect(DB_PATH)
+                        q = build_queue(c)
+                        c.close()
+                    except Exception as e:
+                        print(f"  [WARN] queue load failed: {e}", flush=True)
+                        q = []
+                    if not q:
+                        send_tg_message("✅ Очередь пуста!")
+                        continue
+                    if text == "d10":
+                        chunks = [f"📋 <b>ТОП-10 из {len(q)}</b>\n" + "─" * 25]
+                        for i, l in enumerate(q[:10], 1):
+                            chunks.append("\n" + format_queue_lead(i, l))
+                        send_tg_message("\n".join(chunks))
+                        continue
+                    if text == "next":
+                        l = q[0]
+                        reply_text = generate_application(l, email="onlinebis2016@gmail.com")
+                        send_tg_message(
+                            f"🎯 <b>СЛЕДУЮЩИЙ</b>\n{format_queue_lead(1, l)}\n\n"
+                            f"<code>{html.escape(reply_text or '(не сгенерирован)')}</code>\n"
+                            f"👤 {html.escape(extract_contact(l))}"
+                        )
+                        continue
+                    # app N / skip N
+                    parts = text.split()
+                    if len(parts) == 2 and parts[1].isdigit():
+                        idx = int(parts[1]) - 1
+                        if idx >= len(q):
+                            send_tg_message(f"⚠️ Нет лида №{parts[1]} (всего {len(q)})")
+                            continue
+                        l = q[idx]
+                        if parts[0] == "app":
+                            reply_text = generate_application(l, email="onlinebis2016@gmail.com")
+                            send_tg_message(
+                                f"📝 <b>ОТКЛИК на №{parts[1]}</b>\n"
+                                f"{format_queue_lead(1, l)}\n\n"
+                                f"<code>{html.escape(reply_text or '(не сгенерирован)')}</code>\n"
+                                f"👤 {html.escape(extract_contact(l))}"
+                            )
+                        elif parts[0] == "skip":
+                            record_outcome(l["url"], "skipped")
+                            send_tg_message(f"⏭ Пропущен №{parts[1]}: {l['title'][:60]}. Осталось {len(q) - 1}")
+                    continue
         except Exception as e:
             print(f"  [WARN] TG poll error: {e}", flush=True)
             time.sleep(10)
@@ -1621,6 +1847,7 @@ def run():
         result["title"] = title
         result["url"] = lead.get("url", "")
         result["source"] = lead.get("source", "?")
+        result["description"] = desc[:800]
         scored.append(result)
 
     # Debug: show score distribution
