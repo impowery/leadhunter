@@ -264,6 +264,61 @@ def keyword_score(text, allow_senior=False, kw=None, specific=None, general=None
     }
 
 
+def _llm_chain():
+    """Diversified (client, model) chain. deepseek is primary (stable, cheap);
+    qwen goes last because it is frequently rate-limited upstream (429 ->
+    empty content) and only worth trying when others fail."""
+    chain = []
+    if or_client:
+        chain += [
+            (or_client, "deepseek/deepseek-chat"),
+            (or_client, "meta-llama/llama-3.3-70b-instruct"),
+            (or_client, "qwen/qwen3.7-flash"),
+        ]
+    if or_client2:
+        chain += [
+            (or_client2, "deepseek/deepseek-chat"),
+            (or_client2, "qwen/qwen3.7-flash"),
+        ]
+    if groq_client:
+        chain.append((groq_client, "llama-3.3-70b-versatile"))
+    seen = set()
+    out = []
+    for c, m in chain:
+        if c is None:
+            continue
+        k = (id(c), m)
+        if k not in seen:
+            seen.add(k)
+            out.append((c, m))
+    return out
+
+
+def llm_complete(system, user, max_tokens=200, temperature=0.1, timeout=20):
+    """Try each (client, model) with one retry; return raw text or None."""
+    for client, model in _llm_chain():
+        for attempt in range(2):
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    timeout=timeout,
+                )
+                raw = (resp.choices[0].message.content or "").strip()
+                if raw:
+                    return raw
+                print(f"  [WARN] LLM empty response ({model})", flush=True)
+            except Exception as e:
+                print(f"  [WARN] LLM call failed ({model}): {e}", flush=True)
+            time.sleep(1)
+    return None
+
+
 def llm_score(title, description, allow_senior=False, prompt=None):
     text = f"Title: {title}\nDescription: {description}"
 
@@ -301,49 +356,22 @@ def llm_score(title, description, allow_senior=False, prompt=None):
     else:
         model_prompt = prompt
 
-    for client, model in [
-        (or_client, "qwen/qwen3.7-flash"),
-        (or_client2, "qwen/qwen3.7-flash"),
-        (groq_client, "llama-3.3-70b-versatile"),
-    ]:
-        if client is None:
-            continue
-        try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": model_prompt},
-                    {"role": "user", "content": text},
-                ],
-                temperature=0.1,
-                max_tokens=200,
-                timeout=15,
-            )
-            raw = resp.choices[0].message.content
-            if raw is None:
-                raw = ""
-            raw = raw.strip()
-            if not raw:
-                print(f"  [WARN] LLM empty response ({model})", flush=True)
-                continue
-            try:
-                data = extract_json(raw)
-            except json.JSONDecodeError:
-                print(f"  [WARN] LLM bad JSON ({model}): {raw[:200]}", flush=True)
-                continue
-            data.setdefault("score", 0)
-            data.setdefault("type", "job")
-            data.setdefault("urgency", "low")
-            data.setdefault("budget_indicated", False)
-            data.setdefault("matched_aspects", [])
-            data.setdefault("reason", "")
-            data["score"] = max(0, min(float(data["score"]), 10))
-            return data
-        except Exception as e:
-            print(f"  [WARN] LLM score failed ({model}): {e}")
-            continue
-
-    return keyword_score(text)
+    raw = llm_complete(model_prompt, text, max_tokens=200, temperature=0.1, timeout=20)
+    if raw is None:
+        return keyword_score(text)
+    try:
+        data = extract_json(raw)
+    except json.JSONDecodeError:
+        print(f"  [WARN] LLM bad JSON: {raw[:200]}", flush=True)
+        return keyword_score(text)
+    data.setdefault("score", 0)
+    data.setdefault("type", "job")
+    data.setdefault("urgency", "low")
+    data.setdefault("budget_indicated", False)
+    data.setdefault("matched_aspects", [])
+    data.setdefault("reason", "")
+    data["score"] = max(0, min(float(data["score"]), 10))
+    return data
 
 
 def parse_jobsdb(max_pages=4, fetch_desc=True):
@@ -1230,29 +1258,12 @@ def generate_application(lead, profile_text=None, email=None):
             + "End with a call to action (e.g. 'Happy to discuss, my email is below'). "
             "Do NOT invent experience. Return ONLY the message text."
         )
-        for client, model in [
-            (or_client, "qwen/qwen3.7-flash"),
-            (or_client2, "qwen/qwen3.7-flash"),
-            (groq_client, "llama-3.3-70b-versatile"),
-        ]:
-            if client is None:
-                continue
-            try:
-                resp = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": "You write short, natural, personalized job-application replies."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.4,
-                    max_tokens=250,
-                    timeout=20,
-                )
-                raw = (resp.choices[0].message.content or "").strip()
-                if raw:
-                    return raw[:1500]
-            except Exception as e:
-                print(f"  [WARN] App-gen failed ({model}): {e}", flush=True)
+        raw = llm_complete(
+            "You write short, natural, personalized job-application replies.",
+            prompt, max_tokens=250, temperature=0.4, timeout=25,
+        )
+        if raw:
+            return raw[:1500]
     except Exception:
         pass
     return None
