@@ -11,6 +11,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from lead_hunter_pro import (
+    OWNER_EMAIL,
     PROFILE_TEXT,
     _agent_get_lead_details,
     _agent_get_profile,
@@ -59,7 +60,7 @@ def draft_application(lead_id: int) -> dict[str, Any]:
     lead = _agent_get_lead_details(lead_id)
     if not lead:
         return {"found": False, "message": "Lead not found"}
-    draft = generate_application(lead, email="onlinebis2016@gmail.com")
+    draft = generate_application(lead, email=OWNER_EMAIL or None)
     return {
         "found": True,
         "lead_id": lead_id,

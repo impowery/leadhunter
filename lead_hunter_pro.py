@@ -63,6 +63,7 @@ TG_API_ID = int(os.getenv("TG_API_ID", "0"))
 TG_API_HASH = os.getenv("TG_API_HASH", "")
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "")
+OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "").strip()
 GUEST_BOTS = []
 for _pair in (os.getenv("GUEST_BOTS", "") or "").split(","):
     _pair = _pair.strip()
@@ -2504,7 +2505,7 @@ def run_agent_query(query):
             lead = _agent_get_lead_details(plan.get("lead_id"))
             if not lead:
                 return "Лид с таким ID не найден."
-            draft = generate_application(lead, email="onlinebis2016@gmail.com")
+            draft = generate_application(lead, email=OWNER_EMAIL or None)
             return "🧭 <b>Draft only — not sent</b>\n" + html.escape(draft or "Черновик не сгенерирован.")
     except Exception as e:
         print(f"  [WARN] agent query failed ({type(e).__name__})", flush=True)
@@ -2636,8 +2637,9 @@ PROFILE_TEXT = """Andrey Mashkin: AI Automation and Financial Operations Builder
 - Pricing: systems that run without me, priced on value, not hours.
 - English: fluent professional; Russian: native.
 - Links: LinkedIn linkedin.com/in/andrey-mashkin, GitHub github.com/impowery/leadhunter, project page https://luna56.vercel.app.
-- Timezone: Bangkok, UTC+7. Available immediately, remote worldwide.
-- Contact: onlinebis2016@gmail.com."""
+- Timezone: Bangkok, UTC+7. Available immediately, remote worldwide."""
+if OWNER_EMAIL:
+    PROFILE_TEXT += "\n- Contact: " + OWNER_EMAIL + "."
 
 
 def generate_application(lead, profile_text=None, email=None):
@@ -2787,7 +2789,7 @@ def send_application_kits(leads, limit=3, conn=None):
     sent = 0
     for l in picks:
         try:
-            kit = build_application_kit(l, email="onlinebis2016@gmail.com")
+            kit = build_application_kit(l, email=OWNER_EMAIL or None)
             if not kit.get("letter"):
                 continue
             fit = l.get("fit") or 0
