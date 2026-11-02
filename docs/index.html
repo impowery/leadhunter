@@ -3,141 +3,100 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lead Hunter Pro — AI job-hunting assistant that finds you clients</title>
+<title>Lead Hunter Pro — AI lead and job search for professionals</title>
 <style>
   :root {
-    --bg: #0a0e1a;
-    --bg2: #10162b;
-    --card: #141c36;
-    --border: #223057;
-    --text: #e8edf7;
-    --muted: #8fa0c4;
-    --accent: #4f7cff;
-    --accent2: #22d3ee;
-    --green: #34d399;
-    --amber: #fbbf24;
+    --paper: #f4f1e9;
+    --paper-dark: #e8e3d8;
+    --ink: #17201d;
+    --muted: #68736c;
+    --line: #d5d0c4;
+    --card: #fffdf8;
+    --blue: #2458d6;
+    --teal: #0b8277;
+    --coral: #ec684d;
+    --lime: #d7ec72;
+    --shadow: 0 18px 45px rgba(30, 38, 33, .09);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    background: radial-gradient(1200px 600px at 80% -10%, #1b2a55 0%, transparent 60%),
-                radial-gradient(900px 500px at -10% 30%, #14304a 0%, transparent 55%),
-                var(--bg);
-    color: var(--text);
-    line-height: 1.6;
+    color: var(--ink); background: var(--paper); line-height: 1.6;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background-image: linear-gradient(rgba(23,32,29,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(23,32,29,.035) 1px, transparent 1px);
+    background-size: 32px 32px;
   }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-  header {
-    position: sticky; top: 0; z-index: 10;
-    backdrop-filter: blur(12px);
-    background: rgba(10, 14, 26, .75);
-    border-bottom: 1px solid var(--border);
-  }
-  .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-  .logo { font-weight: 800; font-size: 18px; letter-spacing: .3px; }
-  .logo span { color: var(--accent2); }
-  .nav a { color: var(--muted); text-decoration: none; margin-left: 24px; font-size: 14px; }
-  .nav a:hover { color: var(--text); }
-  .btn {
-    display: inline-block; padding: 12px 26px; border-radius: 12px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: #fff; font-weight: 700; text-decoration: none; font-size: 15px;
-    border: none; cursor: pointer; transition: transform .15s, box-shadow .15s;
-    box-shadow: 0 8px 30px rgba(79, 124, 255, .35);
-  }
-  .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(34, 211, 238, .4); }
-  .btn.ghost { background: transparent; border: 1px solid var(--border); box-shadow: none; color: var(--text); }
-  .btn.ghost:hover { border-color: var(--accent); }
-
-  .hero { padding: 90px 0 70px; text-align: center; }
-  .badge {
-    display: inline-block; padding: 6px 14px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--bg2);
-    font-size: 13px; color: var(--muted); margin-bottom: 22px;
-  }
-  .badge b { color: var(--accent2); }
-  h1 { font-size: 50px; line-height: 1.12; letter-spacing: -.5px; margin-bottom: 20px; }
-  h1 .grad {
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .sub { font-size: 19px; color: var(--muted); max-width: 720px; margin: 0 auto 36px; }
-  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-  .hero-stats { margin-top: 56px; display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; }
-  .hstat { text-align: center; }
-  .hstat .n { font-size: 32px; font-weight: 800; color: var(--accent2); }
-  .hstat .l { font-size: 13px; color: var(--muted); }
-
-  section { padding: 72px 0; }
-  .sec-title { text-align: center; font-size: 34px; letter-spacing: -.3px; margin-bottom: 14px; }
-  .sec-sub { text-align: center; color: var(--muted); max-width: 640px; margin: 0 auto 48px; font-size: 16px; }
-
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; }
-  .step { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 26px 22px; }
-  .step .num {
-    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    font-weight: 800; font-size: 15px; margin-bottom: 16px;
-  }
-  .step h3 { font-size: 17px; margin-bottom: 8px; }
-  .step p { font-size: 14px; color: var(--muted); }
-  .step .tag { margin-top: 14px; font-size: 12px; color: var(--accent2); }
-
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-  .feat { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 26px 24px; transition: border-color .2s, transform .2s; }
-  .feat:hover { border-color: var(--accent); transform: translateY(-3px); }
-  .feat .ic { font-size: 26px; margin-bottom: 12px; }
-  .feat h3 { font-size: 17px; margin-bottom: 8px; }
-  .feat p { font-size: 14px; color: var(--muted); }
-
-  .jobs { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
-  .job { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 22px; text-decoration: none; color: var(--text); transition: border-color .2s, transform .2s; display: block; }
-  .job:hover { border-color: var(--accent2); transform: translateY(-3px); }
-  .job .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .job .score { color: var(--green); font-weight: 800; font-size: 14px; }
-  .job .src { font-size: 11.5px; color: var(--accent2); background: var(--bg2); border: 1px solid var(--border); padding: 3px 8px; border-radius: 8px; }
-  .job h3 { font-size: 15.5px; margin-bottom: 8px; line-height: 1.35; }
-  .job .tags { font-size: 12px; color: var(--muted); }
-  .job .tags span { margin-right: 8px; }
-  .live-note { text-align: center; font-size: 13px; color: var(--muted); margin-top: 22px; }
-
-  .lead-card {
-    background: linear-gradient(160deg, #15223f, #10162b);
-    border: 1px solid var(--border); border-radius: 18px;
-    padding: 26px; max-width: 620px; margin: 0 auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
-  }
-  .lead-card .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .lead-card .pick { background: var(--amber); color: #1a1204; font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 8px; }
-  .lead-card .score { color: var(--green); font-weight: 800; }
-  .lead-card h3 { font-size: 18px; margin-bottom: 4px; }
-  .lead-card .src { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
-  .reply {
-    background: #0b1020; border: 1px solid var(--border); border-radius: 12px;
-    padding: 16px; font-family: Consolas, monospace; font-size: 12.5px;
-    color: #c8d6f0; white-space: pre-wrap; margin-bottom: 14px;
-  }
-  .contact { font-size: 13px; color: var(--muted); }
-  .contact b { color: var(--accent2); font-weight: 600; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  td, th { padding: 12px 14px; border-bottom: 1px solid var(--border); text-align: left; }
-  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; }
-  td .ok { color: var(--green); } td .no { color: #f87171; }
-  .pipeline { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow-x: auto; }
-
-  .cta-final { text-align: center; padding: 90px 0; }
-  .cta-final h2 { font-size: 36px; margin-bottom: 14px; }
-  .cta-final p { color: var(--muted); margin-bottom: 30px; }
-
-  footer { border-top: 1px solid var(--border); padding: 30px 0 40px; text-align: center; color: var(--muted); font-size: 13px; }
-  footer a { color: var(--accent2); text-decoration: none; }
-  @media (max-width: 720px) {
-    h1 { font-size: 34px; }
-    .nav a { margin-left: 14px; }
-    .sec-title { font-size: 27px; }
-  }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 28px; }
+  header { position: sticky; top: 0; z-index: 10; background: rgba(244,241,233,.9); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  .nav { display: flex; align-items: center; justify-content: space-between; min-height: 72px; }
+  .logo { font-size: 17px; font-weight: 900; letter-spacing: -.4px; }
+  .logo:before { content: "↗"; display: inline-grid; place-items: center; width: 27px; height: 27px; margin-right: 8px; border-radius: 8px; color: var(--paper); background: var(--ink); }
+  .logo span { color: var(--blue); }
+  .nav a { color: var(--muted); text-decoration: none; margin-left: 26px; font-size: 13px; font-weight: 700; }
+  .nav a:hover { color: var(--blue); }
+  .btn { display: inline-block; padding: 13px 22px; border-radius: 8px; background: var(--ink); color: var(--paper); font-size: 14px; font-weight: 850; text-decoration: none; border: 1px solid var(--ink); transition: transform .18s, background .18s; }
+  .btn:hover { transform: translateY(-2px); background: var(--blue); border-color: var(--blue); }
+  .btn.ghost { color: var(--ink); background: transparent; border-color: var(--line); }
+  .btn.ghost:hover { background: var(--card); border-color: var(--ink); }
+  .hero { padding: 92px 0 74px; text-align: center; }
+  .badge { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--teal); font: 800 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .3px; text-transform: uppercase; margin-bottom: 25px; }
+  h1 { max-width: 900px; margin: 0 auto 22px; font-size: clamp(42px, 7vw, 76px); line-height: .98; letter-spacing: -4px; font-weight: 950; }
+  h1 .grad { color: var(--blue); }
+  .sub { max-width: 680px; margin: 0 auto 34px; color: var(--muted); font-size: 18px; }
+  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .hero-stats { display: grid; grid-template-columns: repeat(4, 1fr); max-width: 720px; margin: 62px auto 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .hstat { padding: 18px 10px; border-right: 1px solid var(--line); }
+  .hstat:last-child { border-right: 0; }
+  .hstat .n { color: var(--blue); font: 900 25px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .hstat .l { margin-top: 7px; color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .5px; }
+  section { padding: 92px 0; }
+  .sec-title { max-width: 760px; margin: 0 auto 13px; text-align: center; font-size: clamp(30px, 4vw, 48px); line-height: 1.05; letter-spacing: -2px; font-weight: 900; }
+  .sec-sub { max-width: 660px; margin: 0 auto 45px; text-align: center; color: var(--muted); font-size: 16px; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .step, .feat, .job, .lead-card, .pipeline { background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .step { min-height: 225px; padding: 22px; border-radius: 10px; }
+  .step .num { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 36px; border-radius: 7px; color: var(--paper); background: var(--blue); font: 800 13px ui-monospace, monospace; }
+  .step h3, .feat h3 { margin-bottom: 8px; font-size: 16px; letter-spacing: -.3px; }
+  .step p, .feat p { color: var(--muted); font-size: 13px; }
+  .step .tag { margin-top: 16px; color: var(--teal); font: 700 11px ui-monospace, monospace; text-transform: uppercase; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .feat { min-height: 190px; padding: 22px; border-radius: 10px; transition: transform .18s, border-color .18s; }
+  .feat:hover { transform: translateY(-4px); border-color: var(--blue); }
+  .feat .ic { margin-bottom: 28px; color: var(--coral); font: 900 22px ui-monospace, monospace; }
+  .jobs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .job { display: block; padding: 20px; border-radius: 10px; color: var(--ink); text-decoration: none; transition: transform .18s, border-color .18s; }
+  .job:hover { transform: translateY(-3px); border-color: var(--blue); }
+  .job .row, .lead-card .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .job .score, .lead-card .score { color: var(--teal); font: 850 12px ui-monospace, monospace; }
+  .job .src, .lead-card .src { display: inline-block; padding: 4px 7px; border-radius: 5px; color: var(--blue); background: #e9eefc; font: 750 10px ui-monospace, monospace; }
+  .job h3 { margin-bottom: 10px; font-size: 15px; line-height: 1.3; }
+  .job .tags { color: var(--muted); font: 11px ui-monospace, monospace; }
+  .job .tags span { margin-right: 7px; }
+  .job.rejected { opacity: .68; border-style: dashed; box-shadow: none; }
+  .filter-label { color: var(--coral); font: 800 10px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .3px; }
+  .live-note { max-width: 720px; margin: 22px auto 0; text-align: center; color: var(--muted); font-size: 12px; }
+  .lead-card { max-width: 620px; margin: 0 auto; padding: 24px; border-radius: 10px; }
+  .lead-card .pick { padding: 5px 7px; border-radius: 5px; color: var(--ink); background: var(--lime); font: 800 10px ui-monospace, monospace; }
+  .lead-card h3 { margin-bottom: 5px; font-size: 19px; letter-spacing: -.5px; }
+  .lead-card .src { margin-bottom: 14px; color: var(--muted); background: transparent; padding: 0; }
+  .reply { margin-bottom: 14px; padding: 16px; border-left: 3px solid var(--blue); background: #f0eee7; color: #435049; font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+  .contact { color: var(--muted); font-size: 12px; }
+  .contact b, footer a { color: var(--blue); }
+  .rejected-card { opacity: .72; border-style: dashed; box-shadow: none; }
+  .rejected-card .pick { color: #8e382b; background: #f8d8d0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { padding: 14px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { color: var(--muted); font: 800 10px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .5px; }
+  td .ok { color: var(--teal); font-weight: 800; } td .no { color: var(--coral); }
+  .pipeline { overflow-x: auto; border-radius: 10px; }
+  .cta-final { margin: 0 28px; padding: 78px 24px; text-align: center; border-radius: 12px; color: var(--paper); background: var(--ink); }
+  .cta-final h2 { margin-bottom: 13px; font-size: clamp(30px, 5vw, 52px); line-height: 1; letter-spacing: -2px; }
+  .cta-final p { max-width: 620px; margin: 0 auto 28px; color: #b8c3bb; font-size: 15px; }
+  .cta-final .btn { color: var(--ink); background: var(--lime); border-color: var(--lime); }
+  .cta-final .btn:hover { background: #e7f69b; border-color: #e7f69b; }
+  footer { padding: 30px 0 42px; text-align: center; color: var(--muted); font: 11px ui-monospace, monospace; }
+  @media (max-width: 800px) { .steps, .grid, .jobs { grid-template-columns: repeat(2, 1fr); } h1 { letter-spacing: -2.5px; } }
+  @media (max-width: 560px) { .wrap { padding: 0 18px; } .nav { align-items: flex-start; padding: 16px 0; } .nav nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px 12px; } .nav a { margin-left: 0; font-size: 11px; } .hero { padding: 66px 0 55px; } h1 { font-size: 43px; } .sub { font-size: 16px; } .hero-stats { grid-template-columns: repeat(2, 1fr); } .hstat:nth-child(2) { border-right: 0; } .steps, .grid, .jobs { grid-template-columns: 1fr; } section { padding: 66px 0; } .sec-title { letter-spacing: -1px; } .cta-final { margin: 0 18px; } }
 </style>
 </head>
 <body>
@@ -156,18 +115,18 @@
 
 <div class="hero">
   <div class="wrap">
-    <div class="badge">🤖 Runs 24/7 on its own server</div>
-    <h1>An AI assistant that finds you<br>clients — and <span class="grad">writes the reply for you</span></h1>
-    <p class="sub">Every 4 hours it scans 10+ job platforms, filters out 95% of noise, and delivers only the roles that match your skills — with a ready-to-send application written for each one. Your only job: one click.</p>
+    <div class="badge">🤖 Personal AI lead scanner · Telegram delivery</div>
+    <h1>Find relevant work and clients<br>without <span class="grad">searching all day</span></h1>
+    <p class="sub">Every four hours, Lead Hunter scans 17 sources, scores each opportunity against your profile on a 0 to 100 fit scale with evidence from the advert, and sends a short actionable shortlist. For the best matches it prepares a full application package: letter, standard answers and CV.</p>
     <div class="cta-row">
-      <a class="btn" href="mailto:onlinebis2016@gmail.com?subject=Lead%20Hunter%20Pro">Start hunting for me</a>
+      <a class="btn" href="mailto:onlinebis2016@gmail.com?subject=Lead%20Hunter%20Pro%207-day%20pilot">Start a 7-day pilot</a>
       <a class="btn ghost" href="#jobs">See real leads it found</a>
     </div>
     <div class="hero-stats">
-      <div class="hstat"><div class="n">750+</div><div class="l">jobs per scan</div></div>
-      <div class="hstat"><div class="n">10+</div><div class="l">sources</div></div>
-      <div class="hstat"><div class="n">95%</div><div class="l">noise filtered</div></div>
-      <div class="hstat"><div class="n">24/7</div><div class="l">autonomous</div></div>
+      <div class="hstat"><div class="n">17</div><div class="l">sources</div></div>
+      <div class="hstat"><div class="n">4h</div><div class="l">scan interval</div></div>
+      <div class="hstat"><div class="n">0–100</div><div class="l">fit score</div></div>
+      <div class="hstat"><div class="n">TG</div><div class="l">delivery</div></div>
     </div>
   </div>
 </div>
@@ -175,30 +134,30 @@
 <section id="how">
   <div class="wrap">
     <h2 class="sec-title">How it works</h2>
-    <p class="sec-sub">From a flood of job posts to a paid contract — four steps, and algorithms do the work on every one of them.</p>
+    <p class="sec-sub">From scattered vacancies and client requests to a focused shortlist you can act on.</p>
     <div class="steps">
       <div class="step">
         <div class="num">1</div>
         <h3>Scan</h3>
-        <p>Parses 10+ platforms: WeWorkRemotely, Web3Career, Himalayas, Arbeitnow, Jobicy, RemoteOK, Reddit and <b>Telegram job channels</b> — where clients post with money in hand, not just companies.</p>
+        <p>Scans job boards, freelance listings, niche communities, and <b>Telegram channels</b> for both vacancies and project leads.</p>
         <div class="tag">Interval: 4 hours</div>
       </div>
       <div class="step">
         <div class="num">2</div>
         <h3>AI scoring</h3>
-        <p>Each job is scored against your profile: trading bots, DeFi, e-commerce, Telegram automation, LLM pipelines. Score 0–10.</p>
-        <div class="tag">Only your topics</div>
+        <p>Each opportunity gets a 0 to 100 fit score against your profile. Every claimed match must quote a verbatim line from the advert, and three gates are checked: direction, constraints (remote and pay) and eligibility.</p>
+        <div class="tag">Evidence, not keyword guesses</div>
       </div>
       <div class="step">
         <div class="num">3</div>
-        <h3>Top-5 applications</h3>
-        <p>For the strongest leads an LLM writes a personalized first message in the right language: what you do, why it fits, your contacts.</p>
-        <div class="tag">Max 5 per scan</div>
+        <h3>Application package</h3>
+        <p>For every strong match the bot prepares a package: a written first message, standard answers (rate, notice, timezone, links) and the CV. A form autofill opens the vacancy with the fields already filled and stops before Submit.</p>
+        <div class="tag">Letter · answers · CV</div>
       </div>
       <div class="step">
         <div class="num">4</div>
         <h3>Deal tracking</h3>
-        <p>Reply to the bot: «replied» → «called» → «paid». Your funnel from application to paid contract is visible in every scan summary.</p>
+        <p>Track what happened after each message: replied, called, skipped, or paid. The final decision always stays with you.</p>
         <div class="tag">replied → called → paid</div>
       </div>
     </div>
@@ -207,38 +166,33 @@
 
 <section id="features" style="padding-top: 0">
   <div class="wrap">
-    <h2 class="sec-title">Why this is not another job aggregator</h2>
-    <p class="sec-sub">Aggregators show you hundreds of posts. Lead Hunter Pro delivers the five best — with a written reply and working contacts.</p>
+    <h2 class="sec-title">A personal lead service, not another aggregator</h2>
+    <p class="sec-sub">You provide your profile and target market. We configure the scanner and deliver only opportunities worth reviewing.</p>
     <div class="grid">
       <div class="feat">
         <div class="ic">🎯</div>
         <h3>Profile-matched scoring</h3>
-        <p>Configured for your niche: AI bots, DeFi infrastructure, e-commerce. A «senior frontend for a bank» scores 0/10 — and never distracts you.</p>
+        <p>Configured for your niche: AI automation, LLM workflows, integrations, and the services you actually sell. Irrelevant roles are shown only as rejected examples.</p>
       </div>
       <div class="feat">
         <div class="ic">✍️</div>
         <h3>Ready-made applications</h3>
-        <p>An LLM writes the first message for each vacancy: concrete skills from your profile, a call to action, your contacts. Auto RU/EN.</p>
+        <p>Every strong match comes with a ready application package: a specific first message, standard answers for the usual form questions, and the CV file. One command fills the employer form and stops before Submit.</p>
       </div>
       <div class="feat">
         <div class="ic">🔓</div>
-        <h3>Bypasses paywalled boards</h3>
-        <p>WeWorkRemotely now charges $14.95/mo for the Apply button. The bot finds the company's own careers page and hands you the direct link — free.</p>
-      </div>
-      <div class="feat">
-        <div class="ic">🌐</div>
-        <h3>100,000+ web3 jobs</h3>
-        <p>Official Web3Career API connected: crypto, DeFi, Solidity, AI engineering, Solana. Salaries and remote flag on every lead.</p>
+        <h3>Official application paths</h3>
+        <p>Where a board hides the application button, the scanner looks for an official company careers page when one is available.</p>
       </div>
       <div class="feat">
         <div class="ic">🖥️</div>
-        <h3>Runs on your VPS</h3>
-        <p>Not a cloud service — the script lives on your own server, under your control. No third-party backend between you and your clients.</p>
+        <h3>Nothing to install</h3>
+        <p>We configure and run the scanner for you. You receive the results in Telegram and do not need to rent or maintain a server.</p>
       </div>
       <div class="feat">
         <div class="ic">📨</div>
-        <h3>Telegram job channels</h3>
-        <p>Direct clients posting budgets in channels like «Remote Jobs», freelance boards and niche AI-communities — the ones no aggregator indexes. Parsed without an account.</p>
+        <h3>Niche sources</h3>
+        <p>Telegram channels and niche communities often contain project requests that never reach large job boards. They are scored alongside regular vacancies.</p>
       </div>
       <div class="feat">
         <div class="ic">📈</div>
@@ -251,76 +205,68 @@
 
 <section id="jobs" style="background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
   <div class="wrap">
-    <h2 class="sec-title">Real leads, found by the bot</h2>
-    <p class="sec-sub">Live from the current database — these are actual vacancies the scanner matched to the profile this week.</p>
+    <h2 class="sec-title">The filter in action</h2>
+    <p class="sec-sub">Some examples are accepted for review. Others are deliberately shown as rejected so you can see that a keyword match is not enough.</p>
     <div class="jobs">
-      <a class="job" href="https://weworkremotely.com/remote-jobs/bybit-blockchain-risk-control-research-intern" target="_blank" rel="noopener">
-        <div class="row"><span class="src">WeWorkRemotely</span><span class="score">10.0 / 10</span></div>
+      <a class="job rejected" href="https://weworkremotely.com/remote-jobs/bybit-blockchain-risk-control-research-intern" target="_blank" rel="noopener">
+        <div class="row"><span class="src">WeWorkRemotely</span><span class="filter-label">Rejected by profile</span></div>
         <h3>Bybit: Blockchain Risk Control Research Intern</h3>
         <div class="tags"><span>ai</span><span>blockchain</span><span>web3</span><span>crypto</span></div>
       </a>
-      <a class="job" href="https://www.arbeitnow.com/jobs/companies/rohlik/head-of-finance-automation-ai-agentification" target="_blank" rel="noopener">
-        <div class="row"><span class="src">Arbeitnow</span><span class="score">8.5 / 10</span></div>
-        <h3>Head of Finance Automation / AI Agentification</h3>
-        <div class="tags"><span>automation</span><span>ai agent</span><span>make</span><span>workflow</span></div>
+      <a class="job rejected" href="https://www.efinancialcareers.com/jobs-United_States-Boston-Risk__Performance_Analyst.id247191" target="_blank" rel="noopener">
+        <div class="row"><span class="src">eFinancialCareers</span><span class="filter-label">Rejected: onsite only</span></div>
+        <h3>Risk &amp; Performance Analyst</h3>
+        <div class="tags"><span>risk</span><span>analytics</span><span>onsite</span></div>
       </a>
       <a class="job" href="https://jobicy.com/jobs/150143-freelance-agent-evaluation-engineer-3" target="_blank" rel="noopener">
-        <div class="row"><span class="src">Jobicy</span><span class="score">7.0 / 10</span></div>
+        <div class="row"><span class="src">Jobicy</span><span class="score">fit 70 / 100</span></div>
         <h3>Freelance Agent Evaluation Engineer</h3>
         <div class="tags"><span>freelance</span><span>ai</span><span>english</span><span>evaluation</span></div>
       </a>
-      <a class="job" href="https://web3.career/r/zQzNxUTM__zoNg9h" target="_blank" rel="noopener">
-        <div class="row"><span class="src">Web3Career</span><span class="score">10.0 / 10</span></div>
+      <a class="job rejected" href="https://web3.career/r/zQzNxUTM__zoNg9h" target="_blank" rel="noopener">
+        <div class="row"><span class="src">Web3Career</span><span class="filter-label">Rejected: coding-heavy</span></div>
         <h3>Pioneer Talent Program — Full Stack AI Engineer, Backend Oriented</h3>
         <div class="tags"><span>ai</span><span>full-stack</span><span>blockchain</span><span>remote</span></div>
       </a>
-      <a class="job" href="https://t.me/python_djangojobs/1035" target="_blank" rel="noopener">
-        <div class="row"><span class="src">Telegram @python_djangojobs</span><span class="score">2.0 / 10</span></div>
+      <a class="job rejected" href="https://t.me/python_djangojobs/1035" target="_blank" rel="noopener">
+        <div class="row"><span class="src">Telegram @python_djangojobs</span><span class="filter-label">Rejected: coding-heavy</span></div>
         <h3>One Day Offer: Python-разработчики в команду GenAI-агентов</h3>
         <div class="tags"><span>python</span><span>genai agents</span><span>automation framework</span></div>
       </a>
-      <a class="job" href="https://news.ycombinator.com/item?id=49156702" target="_blank" rel="noopener">
-        <div class="row"><span class="src">Hacker News</span><span class="score">1.5 / 10</span></div>
+      <a class="job rejected" href="https://news.ycombinator.com/item?id=49156702" target="_blank" rel="noopener">
+        <div class="row"><span class="src">Hacker News</span><span class="filter-label">Rejected: weak match</span></div>
         <h3>Flywheel Motion — REMOTE worldwide, contract</h3>
         <div class="tags"><span>contract</span><span>remote</span><span>worldwide</span></div>
       </a>
     </div>
-    <div class="live-note">⬆ All six from different sources. Low scores are real: the bot filters hard, only 5 top picks get a written application per scan.</div>
+    <div class="live-note">Rejected examples are intentional: the system should explain why a lead was not a fit instead of hiding the filter behind a perfect-looking demo.</div>
   </div>
 </section>
 
 <section id="example">
   <div class="wrap">
     <h2 class="sec-title">What a lead looks like</h2>
-    <p class="sec-sub">Actual Telegram messages from the bot: lead + written application + contacts. Copy — send. Two sources, same flow.</p>
+    <p class="sec-sub">A result arrives in Telegram with the opportunity, match reason, contact path, and a draft you can edit before sending.</p>
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:24px; max-width:1100px; margin:0 auto;">
     <div class="lead-card">
       <div class="top">
-        <span class="pick">🔥 TOP PICK</span>
-        <span class="score">10.0 / 10</span>
+        <span class="pick">🔥 ACCEPTED EXAMPLE</span>
+        <span class="score">fit 80 / 100</span>
       </div>
-      <h3>Bybit: Blockchain Risk Control Research Intern</h3>
-      <div class="src">WeWorkRemotely · Application generated by LLM</div>
-      <div class="reply">Hello! I'm an AI product builder with 15+ years in trading and
-a background in DeFi (Hyperliquid, automated trading bots).
-I built trading automation and risk dashboards that run 24/7.
-This role matches my experience in blockchain risk and
-quantitative analysis. My email is below — happy to discuss.</div>
-      <div class="contact">👤 📧 onlinebis2016@gmail.com | 🚀 Apply directly: <b>bybit.com/en/careers</b> · free, no board subscription</div>
+      <h3>Kadoa: Web Scraping Engineer</h3>
+      <div class="src">Kadoa · web scraping / data automation · Draft reply</div>
+      <div class="reply">Hi Kadoa team, I build practical data-automation systems that combine web scraping, APIs, and LLM workflows. My LeadHunter Pro project collects and normalizes data from multiple sources, filters stale records, and uses AI to identify the opportunities worth acting on. I would be glad to discuss how this experience could help Kadoa build reliable web-data workflows.</div>
+      <div class="contact">🔗 Official role page: <b>kadoa.com/careers/web-scraping-engineer</b> · review, edit, send</div>
     </div>
     <div class="lead-card">
       <div class="top">
-        <span class="pick">📨 CHANNEL FIND</span>
-        <span class="score">2.0 / 10</span>
+        <span class="pick">📨 REJECTED EXAMPLE</span>
+        <span class="score">Not a fit</span>
       </div>
       <h3>One Day Offer: Python → GenAI Agents team</h3>
-      <div class="src">Telegram @python_djangojobs · Application generated by LLM</div>
-      <div class="reply">Привет! Я AI Product Builder: собираю автономные системы —
-торговых ботов, TG-автоматизацию, AI-агентов, которые работают
-24/7. Ваша команда Agent-разработчиков — прямо моя тема:
-Python + GenAI + automation framework. Готов показать кейсы
-и обсудить условия. Моя почта ниже.</div>
-      <div class="contact">👤 📧 onlinebis2016@gmail.com | 🔗 <b>t.me/python_djangojobs/1035</b> · reply in-channel or email</div>
+      <div class="src">Telegram · automation/GenAI keywords</div>
+      <div class="reply">Rejected: the post is primarily for independent software development. Lead Hunter is not designed to pretend that every AI-related coding role is a fit.</div>
+      <div class="contact">Good filtering is more valuable than producing a larger list.</div>
     </div>
     </div>
   </div>
@@ -336,12 +282,12 @@ Python + GenAI + automation framework. Готов показать кейсы
           <tr><th></th><th>Manual search</th><th>Aggregator</th><th>Lead Hunter Pro</th></tr>
         </thead>
         <tbody>
-          <tr><td>Source scanning</td><td class="no">✗ Hours daily</td><td>✓ Automatic</td><td>✓ Automatic, 10+ boards</td></tr>
+          <tr><td>Source scanning</td><td class="no">✗ Hours daily</td><td>✓ Automatic</td><td>✓ Automatic, 17 sources</td></tr>
           <tr><td>Relevance filtering</td><td class="no">✗ By hand</td><td class="no">✗ Filters only</td><td class="ok">✓ LLM vs your profile</td></tr>
           <tr><td>Personal application</td><td class="no">✗ One template</td><td class="no">✗ None</td><td class="ok">✓ Written per vacancy</td></tr>
           <tr><td>Paid Apply buttons</td><td class="no">✗ Pay or skip</td><td class="no">✗</td><td class="ok">✓ Direct company link</td></tr>
           <tr><td>Conversion stats</td><td class="no">✗ None</td><td class="no">✗ None</td><td class="ok">✓ Reply → call → paid</td></tr>
-          <tr><td>Works without you</td><td class="no">✗</td><td class="no">✗</td><td class="ok">✓ 24/7 on your server</td></tr>
+          <tr><td>Setup</td><td class="no">✗ Manual</td><td>✓ Self-serve</td><td class="ok">✓ Done for you</td></tr>
         </tbody>
       </table>
     </div>
@@ -350,15 +296,15 @@ Python + GenAI + automation framework. Готов показать кейсы
 
 <div class="cta-final">
   <div class="wrap">
-    <h2>Start with a week —<br>and see who finds you first</h2>
-    <p>Set up for your profile in one day. Pay only when the contracts come in.</p>
-    <a class="btn" href="mailto:onlinebis2016@gmail.com?subject=Lead%20Hunter%20Pro">Email: onlinebis2016@gmail.com</a>
+    <h2>Try a profile-matched scan<br>for one week</h2>
+    <p><strong>7-day pilot · setup included · plans from $29/month</strong><br>Tell us what you do, what work you want, and where to look. We configure the scanner and deliver the results in Telegram. You review and send applications yourself.</p>
+    <a class="btn" href="mailto:onlinebis2016@gmail.com?subject=Lead%20Hunter%20Pro%207-day%20pilot">Request a 7-day pilot</a>
   </div>
 </div>
 
 <footer>
   <div class="wrap">
-    Lead Hunter Pro · AI Product Builder · <a href="mailto:onlinebis2016@gmail.com">onlinebis2016@gmail.com</a>
+    Lead Hunter Pro · Personal AI lead scanner for independent professionals and small teams · <a href="mailto:onlinebis2016@gmail.com">onlinebis2016@gmail.com</a>
   </div>
 </footer>
 

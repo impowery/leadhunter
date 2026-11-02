@@ -1,6 +1,25 @@
-*.session
-*.db
+# --- secrets and runtime state (never commit) ---
 .env
-guests.json
+.env.*
+!.env.example
+*.session
+*.session-journal
+*.db
 data/
+guests.json
+gmail_seen.json
+sent_hashes.txt
+llm_usage.jsonl
+*.log
+*.bak
+crontab.bak.*
+
+# --- personal data ---
+apply/profile.json
+resume/
+
+# --- python ---
 __pycache__/
+*.pyc
+venv/
+.venv/
