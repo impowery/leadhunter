@@ -451,7 +451,7 @@ def keyword_score(text, allow_senior=False, kw=None, specific=None, general=None
 # USD per 1M tokens (input, output). Tokenharbor list prices; free tiers are 0.
 LLM_PRICES = {
     "claude-haiku-5.5": (0.10, 0.50),
-    "claude-sonnet-4.6": (3.00, 15.00),
+    "deepseek-v4.1-flash": (0.28, 0.42),
     "deepseek-v4.1-flash:free": (0.0, 0.0),
     "openai/gpt-oss-120b": (0.0, 0.0),
     "deepseek/deepseek-chat": (0.27, 1.10),
@@ -462,7 +462,7 @@ LLM_USAGE_LOG = os.path.join(DATA_DIR, "llm_usage.jsonl")
 # Cheap-but-reliable model that drives letters and kits.
 LLM_QUALITY_MODEL = os.getenv("LLM_QUALITY_MODEL", "claude-haiku-5.5")
 # Stronger model, used only when the cheap tier returns unusable JSON.
-LLM_ESCALATE_MODEL = os.getenv("LLM_ESCALATE_MODEL", "claude-sonnet-4.6")
+LLM_ESCALATE_MODEL = os.getenv("LLM_ESCALATE_MODEL", "deepseek-v4.1-flash")
 
 
 def _llm_chain(tier="bulk"):
