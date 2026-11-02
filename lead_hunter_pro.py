@@ -451,18 +451,33 @@ def keyword_score(text, allow_senior=False, kw=None, specific=None, general=None
 # USD per 1M tokens (input, output). Tokenharbor list prices; free tiers are 0.
 LLM_PRICES = {
     "claude-haiku-5.5": (0.10, 0.50),
-    "deepseek-v4.1-flash": (0.28, 0.42),
+    "deepseek-v4.1-flash": (0.30, 1.20),
+    "deepseek-v4.1-flash-1017": (0.15, 0.60),
     "deepseek-v4.1-flash:free": (0.0, 0.0),
+    "deepseek-v4-flash:free": (0.0, 0.0),
+    "mimo-v2.6-flash:free": (0.0, 0.0),
+    "glm-5.3-flash": (0.15, 0.50),
+    "gpt-6-luna": (0.10, 0.50),
     "openai/gpt-oss-120b": (0.0, 0.0),
     "deepseek/deepseek-chat": (0.27, 1.10),
     "meta-llama/llama-3.3-70b-instruct": (0.12, 0.30),
     "qwen/qwen3.7-flash": (0.05, 0.10),
 }
 LLM_USAGE_LOG = os.path.join(DATA_DIR, "llm_usage.jsonl")
-# Cheap-but-reliable model that drives letters and kits.
-LLM_QUALITY_MODEL = os.getenv("LLM_QUALITY_MODEL", "claude-haiku-5.5")
-# Stronger model, used only when the cheap tier returns unusable JSON.
-LLM_ESCALATE_MODEL = os.getenv("LLM_ESCALATE_MODEL", "deepseek-v4.1-flash")
+def _env_list(name, default):
+    return [m.strip() for m in os.getenv(name, default).split(",") if m.strip()]
+
+
+# Model lists per tier, all served by tokenharbor (th_client). Order = preference.
+# Legacy LLM_QUALITY_MODEL / LLM_ESCALATE_MODEL, if set, go first in their list.
+LLM_BULK_MODELS = _env_list("LLM_BULK_MODELS", "deepseek-v4.1-flash:free,deepseek-v4-flash:free")
+LLM_BULK_PAID_MODELS = _env_list("LLM_BULK_PAID_MODELS", "claude-haiku-5.5,glm-5.3-flash")
+LLM_QUALITY_MODELS = _env_list("LLM_QUALITY_MODELS", "claude-haiku-5.5,gpt-6-luna,glm-5.3-flash")
+LLM_ESCALATE_MODELS = _env_list("LLM_ESCALATE_MODELS", "deepseek-v4.1-flash-1017,gpt-6-luna")
+if os.getenv("LLM_QUALITY_MODEL"):
+    LLM_QUALITY_MODELS = [os.getenv("LLM_QUALITY_MODEL").strip()] + LLM_QUALITY_MODELS
+if os.getenv("LLM_ESCALATE_MODEL"):
+    LLM_ESCALATE_MODELS = [os.getenv("LLM_ESCALATE_MODEL").strip()] + LLM_ESCALATE_MODELS
 
 
 def _llm_chain(tier="bulk"):
@@ -476,14 +491,12 @@ def _llm_chain(tier="bulk"):
     qwen goes last in every tier: it is frequently rate-limited upstream
     (429 -> empty content).
     """
-    free, paid, ors = [], [], []
-    if th_client:
-        free.append((th_client, "deepseek-v4.1-flash:free"))
-        paid.append((th_client, LLM_QUALITY_MODEL))
-        if LLM_ESCALATE_MODEL:
-            paid.append((th_client, LLM_ESCALATE_MODEL))
-    if groq_client:
-        free.append((groq_client, "openai/gpt-oss-120b"))
+    th = [(th_client, m) for m in LLM_BULK_MODELS] if th_client else []
+    th_paid = [(th_client, m) for m in LLM_BULK_PAID_MODELS] if th_client else []
+    th_quality = [(th_client, m) for m in LLM_QUALITY_MODELS] if th_client else []
+    th_escalate = [(th_client, m) for m in LLM_ESCALATE_MODELS] if th_client else []
+    groq = [(groq_client, "openai/gpt-oss-120b")] if groq_client else []
+    ors = []
     if or_client:
         ors += [
             (or_client, "deepseek/deepseek-chat"),
@@ -497,14 +510,14 @@ def _llm_chain(tier="bulk"):
         ]
 
     if tier == "quality":
-        chain = paid[:1] + free + paid[1:] + ors
+        chain = th_quality + th + ors + groq
     elif tier == "escalate":
-        chain = paid[1:] + paid[:1] + free + ors
+        chain = th_escalate + th_quality + th + ors + groq
     elif os.getenv("LLM_BULK_FREE_FIRST", "1") != "0":
-        chain = free + paid + ors
+        chain = th + th_paid + ors + groq
     else:
         # Escape hatch: paid models first when the free tiers are rate-limited.
-        chain = paid + free + ors
+        chain = th_paid + th + ors + groq
 
     seen = set()
     out = []
