@@ -1626,23 +1626,50 @@ ALLOW_GEO = [str(x).lower() for x in (_ELIG.get("allow_geo") or [])]
 DENY_GEO = [str(x).lower() for x in (_ELIG.get("deny_geo") or [])]
 
 
-def passes_location(location):
-    """Drop onsite/hub jobs and remote jobs locked to a region we cannot take.
+HOME_TERMS = [str(x).lower() for x in (_ELIG.get("home_terms") or [])]
 
-    Board locations look like 'Remote - USA', 'Remote - APAC', 'Hong Kong; Singapore',
-    'Menlo Park, CA; New York, NY'. Empty location is kept: better to score it than
-    lose a remote-first board that leaves the field blank.
+RE_REMOTE = re.compile(r"(remote|anywhere|distributed|work from home|wfh|home ?based)")
+
+# Words that describe "open to anyone" rather than a place you must live in.
+GENERIC_LOC = re.compile(
+    r"(remote|anywhere|distributed|work from home|wfh|home ?based|hybrid|onsite|on-site|"
+    r"global|worldwide|world wide|any location|multiple locations|various|flexible|"
+    r"apac|asia|asia-pacific|asia pacific|sea|southeast asia|south-east asia|emea|europe|"
+    r"european|middle east|mena|africa|region|timezone|time zone|utc|office|world|"
+    r"nationwide|country|location|locations|based|preferred|can be)"
+)
+
+
+def passes_location(location):
+    """Keep a job when it is in the owner's own city, or genuinely open remote.
+
+    Board locations look like 'Remote - USA', 'Remote - APAC', 'Bangkok, Thailand',
+    'Hong Kong; Singapore', 'Menlo Park, CA'. Rules, in order:
+
+    1. Bangkok/Thailand wins outright: onsite there is a fit, the owner lives there.
+    2. Otherwise the location must say remote.
+    3. A named country or city we cannot sit in is a drop, even when it says remote
+       ('Remote - London' means you must live in London). Rather than list every city
+       on earth, strip the generic words; anything left is a place, so it drops.
+    4. Remote with nothing but generic words, or with a region we can take, is kept.
+
+    An empty location is kept: better to score it than lose a remote-first board whose
+    API leaves the field blank.
     """
     if not REQUIRE_REMOTE:
         return True
     loc = (location or "").strip().lower()
     if not loc:
         return True
-    if not any(k in loc for k in ("remote", "anywhere", "distributed", "work from home")):
+    if any(k in loc for k in HOME_TERMS):
+        return True
+    if not RE_REMOTE.search(loc):
         return False
     if any(k in loc for k in DENY_GEO):
         return False
-    return True
+    remainder = GENERIC_LOC.sub(" ", loc)
+    remainder = re.sub(r"[^a-z0-9]+", "", remainder)
+    return remainder == ""
 
 
 def _crypto_ops_relevant(text, title=""):

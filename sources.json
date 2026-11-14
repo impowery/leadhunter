@@ -70,13 +70,23 @@
       },
       {
         "board": "stripe",
-        "enabled": false,
-        "note": "786 jobs, 58 noisy ops: enable only with narrow prefilter"
+        "enabled": true,
+        "note": "nuisy; kept for the Bangkok compliance role, narrow prefilter expected"
       },
       {
         "board": "kraken",
         "enabled": false,
         "note": "board token unknown, 404 on probe"
+      },
+      {
+        "board": "xendit",
+        "enabled": true,
+        "note": "payments SEA, Bangkok ops + recons roles"
+      },
+      {
+        "board": "thunes",
+        "enabled": true,
+        "note": "payments, Manila ops roles"
       }
     ],
     "lever": [
@@ -119,8 +129,8 @@
       },
       {
         "board": "airwallex",
-        "enabled": false,
-        "note": "484 jobs, 35 noisy: mostly product/revenue ops"
+        "enabled": true,
+        "note": "Singapore/APAC risk and ops roles"
       }
     ]
   },
@@ -185,17 +195,23 @@
     }
   },
   "eligibility": {
+    "home_terms": [
+      "bangkok",
+      "thailand"
+    ],
     "require_remote": true,
     "allow_geo": [
       "apac",
       "asia",
+      "asia-pacific",
       "worldwide",
       "global",
       "anywhere",
       "emea",
       "europe",
       "middle east",
-      "remote"
+      "sea",
+      "southeast asia"
     ],
     "deny_geo": [
       "usa",
@@ -210,10 +226,37 @@
       "india",
       "australia",
       "new zealand",
-      "japan only",
-      "korea only",
-      "singapore only"
+      "japan",
+      "korea",
+      "china",
+      "hong kong",
+      "singapore",
+      "taiwan",
+      "vietnam",
+      "indonesia",
+      "malaysia",
+      "philippines",
+      "mexico",
+      "brazil",
+      "poland",
+      "germany",
+      "france",
+      "spain",
+      "italy",
+      "netherlands",
+      "switzerland",
+      "austria",
+      "malta",
+      "cyprus",
+      "israel",
+      "turkey",
+      "uae",
+      "saudi",
+      "egypt",
+      "nigeria",
+      "kenya",
+      "south africa"
     ],
-    "_note": "boards list location like 'Remote - USA' or 'Hong Kong; Singapore'. Onsite/hub jobs are dropped; remote-but-geo-locked jobs are dropped unless the region is APAC, worldwide or EMEA."
+    "_note": "Bangkok/Thailand jobs are kept even onsite: the owner lives there. Otherwise the job must be remote and either region-generic (APAC, Asia, EMEA, worldwide) or name no locked country/city. Remote-London or Remote-Japan is a drop because it implies residency there."
   }
 }
