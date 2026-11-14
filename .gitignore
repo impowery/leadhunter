@@ -15,6 +15,11 @@ llm_usage.jsonl
 crontab.bak.*
 
 # --- personal data ---
+apply/letters/
+apply/queue.json
+apply/applied.json
+apply/last_letter.txt
+apply/last_fill.png
 apply/profile.json
 resume/
 

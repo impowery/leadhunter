@@ -8,7 +8,9 @@ The script fills standard fields, attaches the CV, takes a screenshot and
 stops. It never clicks Submit, so you always review the form first.
 """
 
+import hashlib
 import json
+import re
 import os
 import subprocess
 import sys
@@ -17,6 +19,8 @@ import time
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+LETTERS_DIR = os.path.join(HERE, "letters")
+APPLIED_PATH = os.path.join(HERE, "applied.json")
 
 FIELD_MAP = {
     "first_name": ["first name", "firstname", "given name", "first_name"],
@@ -32,7 +36,14 @@ FIELD_MAP = {
     "company": ["current company", "company", "employer", "organisation", "organization", "org"],
     "salary": ["salary", "compensation", "rate", "expected pay", "desired"],
     "notice": ["notice", "start date", "availability", "when can you start"],
+    "bio": ["about you", "tell your story", "about me", "short bio", "your bio",
+            "introduce yourself", "professional summary"],
+    "skills": ["skills you want", "your skills", "key skills", "skills", "expertise",
+               "technologies"],
 }
+
+TAG_KEYS = ("skills",)
+SUBMIT_WORDS = ("submit", "send application", "apply now")
 
 COVER_WORDS = ["cover letter", "why do you", "why are you", "message", "additional information",
                "tell us about yourself", "motivation", "comment"]
@@ -58,6 +69,68 @@ def get_url():
 def load_profile():
     with open(os.path.join(HERE, "profile.json"), encoding="utf-8") as f:
         return json.load(f)
+
+
+def url_key(url):
+    return hashlib.sha1(url.strip().encode("utf-8")).hexdigest()[:16]
+
+
+def load_applied():
+    if not os.path.exists(APPLIED_PATH):
+        return {}
+    try:
+        with open(APPLIED_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def is_applied(url):
+    return url_key(url) in load_applied()
+
+
+def mark_applied(url, title="", note=""):
+    data = load_applied()
+    data[url_key(url)] = {
+        "url": url,
+        "title": title,
+        "at": time.strftime("%Y-%m-%d %H:%M"),
+        "note": note,
+    }
+    with open(APPLIED_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    return len(data)
+
+
+def cached_letter(url):
+    path = os.path.join(LETTERS_DIR, url_key(url) + ".txt")
+    if os.path.exists(path):
+        text = open(path, encoding="utf-8").read().strip()
+        return text or ""
+    return ""
+
+
+def save_letter(url, text):
+    if not text:
+        return ""
+    os.makedirs(LETTERS_DIR, exist_ok=True)
+    path = os.path.join(LETTERS_DIR, url_key(url) + ".txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text.strip() + "\n")
+    return path
+
+
+def letter_for(url, profile):
+    """Letter for this job: local cache first, VPS over SSH only on a miss."""
+    text = cached_letter(url)
+    if text:
+        return text, "cache"
+    text = fetch_letter_ssh(profile, url)
+    if text:
+        save_letter(url, text)
+        return text, "vps"
+    text = read_letter(profile)
+    return text, "file" if text else "none"
 
 
 def read_letter(profile):
@@ -98,6 +171,21 @@ def fetch_letter_ssh(profile, url):
         return ""
 
 
+def match_field(strong, weak):
+    """Match a form field to a profile key.
+
+    The visible label wins over name/placeholder, otherwise a placeholder like
+    "skills you want employers to see" matches "company" through "employers".
+    """
+    for hay in (strong, weak):
+        if not hay:
+            continue
+        for key, words in FIELD_MAP.items():
+            if any(re.search(r"\b" + re.escape(w), hay) for w in words):
+                return key
+    return None
+
+
 def describe(el):
     try:
         return " ".join(
@@ -136,6 +224,14 @@ def fill_inputs(page, profile, letter):
                 skipped.append("(no label)")
                 continue
             kind = el.get_attribute("type") or el.evaluate("e => e.tagName.toLowerCase()")
+            matched = match_field(label_hint, hint)
+            # profile fields win over the cover letter: bio often reads "tell us about yourself"
+            if matched in ("bio", "skills") and str(profile.get(matched, "") or ""):
+                if type_into(page, el, str(profile[matched]), tag_input=matched in TAG_KEYS):
+                    filled.append(matched)
+                else:
+                    skipped.append(matched + " (type failed)")
+                continue
             if kind == "textarea" or any(w in haystack for w in COVER_WORDS):
                 if letter:
                     el.fill(letter[:1800])
@@ -457,22 +553,114 @@ def attach_cv(page, profile):
         return "attach failed: " + str(e)[:80]
 
 
-def main():
-    url = get_url()
-    if not url.startswith("http"):
-        print("No URL found. Copy a job link, then run again.")
-        input("Press Enter to close...")
-        return
-    profile = load_profile()
-    letter = read_letter(profile)
-    if not letter:
-        print("Asking the bot for the tailored letter...")
-        letter = fetch_letter_ssh(profile, url)
-    print("URL:", url)
-    print("Letter:", "loaded" if letter else "not found")
+def open_apply_form(page, url):
+    """Open the real application form for the common ATS hosts."""
+    note = "as is"
+    if "jobs.lever.co" in url and "/apply" not in url:
+        try:
+            page.goto(url.rstrip("/") + "/apply", wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(2500)
+            return "lever /apply"
+        except Exception:
+            return "lever: apply page failed"
+    if not any(h in url for h in ("greenhouse.io", "ashbyhq.com", "workable.com")):
+        return note
+    if "job-boards.greenhouse.io" in url and "/jobs/" in url and "/apply" not in url:
+        page.wait_for_timeout(1200)
+    for label in ("Apply for this job", "Apply Now", "Apply now", "Apply"):
+        try:
+            btn = page.query_selector("a:has-text('%s'), button:has-text('%s')" % (label, label))
+            if btn and btn.is_visible():
+                btn.click()
+                page.wait_for_timeout(2500)
+                return "clicked: " + label
+        except Exception:
+            continue
+    return note
 
-    with sync_playwright() as p:
+
+def type_into(page, el, value, tag_input=False):
+    """Fill a field. Tag inputs need one value per Enter, plain fields one shot."""
+    if not tag_input:
+        el.fill(value)
+        return True
+    parts = [x.strip() for x in value.split(",") if x.strip()]
+    if len(parts) <= 1:
+        el.fill(value)
+        return True
+    try:
+        el.click()
+        for part in parts:
+            el.type(part, delay=12)
+            page.wait_for_timeout(70)
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(70)
+        return True
+    except Exception:
+        try:
+            el.fill(value)
+        except Exception:
+            return False
+        return True
+
+
+def advance_steps(page, limit):
+    """Click Continue/Next up to `limit` times. Submit is never clicked."""
+    done = []
+    for _ in range(max(0, limit)):
+        moved = False
+        for sel in ("button:has-text('Continue')", "button:has-text('Next')",
+                    "a:has-text('Continue')", "button:has-text('Save and continue')"):
+            try:
+                btns = page.query_selector_all(sel)
+            except Exception:
+                continue
+            for btn in btns:
+                try:
+                    text = (btn.inner_text() or "").strip().lower()
+                    if not btn.is_visible() or any(w in text for w in SUBMIT_WORDS):
+                        continue
+                    btn.click()
+                    page.wait_for_timeout(2200)
+                    done.append(text[:24])
+                    moved = True
+                    break
+                except Exception:
+                    continue
+            if moved:
+                break
+        if not moved:
+            break
+    return done
+
+
+def parse_args(argv):
+    url, steps, flags = "", 0, set()
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--steps" and i + 1 < len(argv):
+            try:
+                steps = int(argv[i + 1])
+            except ValueError:
+                steps = 0
+            i += 2
+            continue
+        if arg.startswith("--"):
+            flags.add(arg[2:])
+            i += 1
+            continue
+        if not url and "://" in arg:
+            url = arg.strip()
+        i += 1
+    return url, steps, flags
+
+
+def run(url, profile, letter="", headless=None, steps=0, keep_open=None):
+    """Fill the form for one job URL. Never clicks Submit."""
+    if headless is None:
         headless = os.getenv("AUTOFILL_HEADLESS", "0") == "1"
+    with sync_playwright() as p:
         browser = p.chromium.launch(
             channel="chrome",
             headless=headless,
@@ -482,12 +670,7 @@ def main():
         page = context.new_page()
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(3000)
-        if "jobs.lever.co" in url and "/apply" not in url:
-            try:
-                page.goto(url.rstrip("/") + "/apply", wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(2500)
-            except Exception:
-                pass
+        form_note = open_apply_form(page, url)
 
         filled, skipped = fill_inputs(page, profile, letter)
         selects = fill_selects(page, profile)
@@ -497,6 +680,7 @@ def main():
         page.wait_for_timeout(900)
         combos += fill_combos(page, profile)
         radios = fill_radios(page, profile)
+        steps_done = advance_steps(page, steps)
         cv = attach_cv(page, profile)
 
         shot = os.path.join(HERE, "last_fill.png")
@@ -505,24 +689,55 @@ def main():
         except Exception:
             pass
 
-        print()
+        print("Form:", form_note)
         print("Filled:", ", ".join(sorted(set(filled))) or "nothing")
         print("Selects:", "; ".join(selects) or "nothing")
         print("Combos:", "; ".join(combos) or "nothing")
         print("Radios:", "; ".join(radios) or "nothing")
         print("Add-answer:", "; ".join(added) or "nothing")
+        print("Steps:", "; ".join(steps_done) or "none")
         print("CV:", cv)
         print("Skipped:", "; ".join(skipped[:12]) or "nothing")
         print("Screenshot:", shot)
         print()
         print("Review the form in the browser and submit it yourself.")
-        print("Close the browser window when you are done.")
-        if not headless:
+        if keep_open is None:
+            keep_open = not headless
+        if keep_open:
             try:
                 page.wait_for_event("close", timeout=1800000)
             except Exception:
                 pass
         browser.close()
+    return {"filled": filled, "skipped": skipped, "cv": cv, "steps": steps_done,
+            "form": form_note, "screenshot": shot}
+
+
+def main():
+    url, steps, flags = parse_args(sys.argv[1:])
+    if not url:
+        url = get_url()
+    if "://" not in url:
+        print("No URL found. Copy a job link, then run again.")
+        if sys.stdin and sys.stdin.isatty():
+            try:
+                input("Press Enter to close...")
+            except (EOFError, KeyboardInterrupt):
+                pass
+        return
+    profile = load_profile()
+    applied = is_applied(url)
+    print("URL:", url)
+    if applied and "force" not in flags:
+        print("Already in applied.json:", load_applied()[url_key(url)])
+        print("Run with --force to fill it again.")
+        return
+    letter, source = letter_for(url, profile)
+    print("Letter:", source)
+    run(url, profile, letter=letter, steps=steps)
+    if "mark" in flags:
+        count = mark_applied(url)
+        print("Marked applied (%d total)." % count)
 
 
 if __name__ == "__main__":
