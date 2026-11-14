@@ -768,7 +768,7 @@ def llm_score(title, description, allow_senior=False, prompt=None):
             "scraping, data automation, financial operations, trading operations, treasury, "
             "fintech, payments, compliance, risk, and practical SaaS/MVP work.\n"
             "Finance and operations scoring guide (use these bands, do not auto-boost on the word AI):\n"
-            "- score 8-10: TRACK 1 crypto trading operations and middle office: trade support, trade lifecycle, settlement, reconciliation of trades, fees, cash and PnL, treasury and cash management, exchange and brokerage operations, post-trade, break resolution, exception handling, KYT and transaction monitoring analysts. Also TRACK 2 AI automation contracts where the deliverable is a production system: MCP servers, RAG pipelines, LLM integrations, Telegram bots, scraping pipelines, deployed on a VPS with monitoring and alerts. These are the best matches.\n"
+            "- score 8-10: TRACK 1 crypto trading operations and middle office: trade support, trade lifecycle, settlement, reconciliation of trades, fees, cash and PnL, treasury and cash management, exchange and brokerage operations, post-trade, break resolution, exception handling, KYT and transaction monitoring analysts. Also TRACK 2 AI automation contracts, but only when the advert names a real deliverable: MCP servers, RAG pipelines, LLM integrations, Telegram bots, scraping pipelines, production systems with monitoring. Do NOT treat gig-marketplace requests as track 2 matches: phrases like expert needed, quick project, ongoing project, contractors needed, make.com, gohighlevel, zapier, budget of, hourly rate describe anonymous marketplace work that needs a separate platform account, so score them 4-5 at most. These are the best matches.\n"
             "- score 6-8: adjacent finance operations such as fintech operations, payments operations, risk operations, custody and asset servicing, fund accounting; and TRACK 3 stablecoin payments and crypto integration roles such as non-custodial checkout, on-chain payment detection, invoice matching, reorg handling and wallet auth.\n"
             "- score 5-6: Financial Analyst, Trading Assistant, Operations Analyst and similar hands-on analyst roles built on Excel and SQL.\n"
             "- score 4-5: Portfolio Manager, Credit Analyst and other senior or strategy finance roles where the person is only a partial fit.\n"
@@ -3132,6 +3132,21 @@ def send_tg_document(path, caption=""):
         return False
 
 
+APPLYABLE_HOSTS = ("greenhouse.io", "lever.co", "ashbyhq.com", "workable.com",
+                   "recruitee.com", "teamtailor.com", "smartrecruiters.com", "jobvite.com",
+                   "breezy.hr", "bamboohr.com", "rippling.com", "icims.com", "myworkdayjobs.com")
+GIG_HOSTS = ("upwork.com", "freelancer.com", "peopleperhour.com", "fiverr.com", "toptal.com",
+             "guru.com", "codeable.io", "workana.com", "twine.net", "contra.com")
+
+
+def is_applyable(url):
+    """True when the form can be filled from a browser without a marketplace account."""
+    u = (url or "").lower()
+    if any(h in u for h in GIG_HOSTS):
+        return False
+    return any(h in u for h in APPLYABLE_HOSTS)
+
+
 def send_application_kits(leads, limit=3, conn=None):
     """Send ready-to-use application packages for the strongest leads."""
     if not leads:
@@ -3148,6 +3163,8 @@ def send_application_kits(leads, limit=3, conn=None):
             break
         url = l.get("url")
         if not url or url in seen:
+            continue
+        if not is_applyable(url):
             continue
         if (l.get("decision") or "") != "recommend" and float(l.get("fit") or 0) < 60:
             continue
