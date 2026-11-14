@@ -18,6 +18,7 @@ crontab.bak.*
 apply/letters/
 apply/queue.json
 apply/applied.json
+apply/skipped.json
 apply/last_letter.txt
 apply/last_fill.png
 apply/profile.json

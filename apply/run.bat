@@ -1,7 +1,6 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-setlocal
 set MODE=%~1
 set ARG2=%~2
 set ARG3=%~3

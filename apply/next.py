@@ -16,6 +16,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE_PATH = os.path.join(HERE, "queue.json")
 APPLIED_PATH = os.path.join(HERE, "applied.json")
+SKIPPED_PATH = os.path.join(HERE, "skipped.json")
 LETTER_PATH = os.path.join(HERE, "last_letter.txt")
 QUEUE_MAX_AGE_H = 12
 
@@ -44,6 +45,39 @@ def stale(payload):
     except Exception:
         return True
     return (time.time() - built) / 3600.0 > QUEUE_MAX_AGE_H
+
+
+def load_skipped():
+    if not os.path.exists(SKIPPED_PATH):
+        return {}
+    try:
+        return json.load(open(SKIPPED_PATH, encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def mark_skipped(url, title=""):
+    """Remember a job the owner decided against, so a queue rebuild will not bring it back."""
+    data = load_skipped()
+    key = autofill.url_key(url)
+    entry = data.get(key) or {"url": url, "title": title, "times": 0}
+    entry["title"] = title or entry.get("title", "")
+    entry["times"] = int(entry.get("times", 0)) + 1
+    entry["at"] = time.strftime("%Y-%m-%d %H:%M")
+    data[key] = entry
+    with open(SKIPPED_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    return len(data)
+
+
+def save_queue(payload):
+    with open(QUEUE_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+
+
+def rotate(items, index):
+    """Move the item to the back so the next run opens a different job instead of the same one."""
+    items.append(items.pop(index))
 
 
 def show(items):
@@ -88,7 +122,7 @@ def main():
     if autofill.is_applied(url):
         print("Already applied:", url)
         items.pop(wanted - 1)
-        json.dump(payload, open(QUEUE_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        save_queue(payload)
         return 1
 
     letter = (item.get("letter") or "").strip()
@@ -111,17 +145,26 @@ def main():
     print()
     print("Skipped:", ", ".join(result["skipped"][:10]) or "nothing")
     print()
-    answer = input("Did you submit this application? [y/N/q] ").strip().lower()
-    if answer == "q":
-        print("Queue unchanged.")
+    print("y = sent it,  n = not now (goes to the back),  d = never show again,  q = stop")
+    answer = input("Did you submit this application? [y/n/d/q] ").strip().lower()
+    if answer in ("q", ""):
+        print("Queue unchanged. It stays first for next time.")
         return 0
-    if answer in ("y", "yes", "д", "да"):
+    if answer in ("y", "yes", "\u0434", "\u0434\u0430"):
         count = autofill.mark_applied(url, title=item.get("title", ""))
         items.pop(wanted - 1)
-        json.dump(payload, open(QUEUE_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        print("Marked applied (%d total). Next in queue: %d left." % (count, len(items)))
-    else:
-        print("Not marked. It stays in the queue.")
+        save_queue(payload)
+        print("Marked applied (%d total). %d left in the queue." % (count, len(items)))
+        return 0
+    if answer in ("d", "drop", "never"):
+        items.pop(wanted - 1)
+        save_queue(payload)
+        total = mark_skipped(url, title=item.get("title", ""))
+        print("Dropped for good (%d remembered). %d left in the queue." % (total, len(items)))
+        return 0
+    rotate(items, wanted - 1)
+    save_queue(payload)
+    print("Sent to the back of the queue. It returns after the other %d." % (len(items) - 1))
     return 0
 
 

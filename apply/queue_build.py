@@ -18,6 +18,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE_PATH = os.path.join(HERE, "queue.json")
 APPLIED_PATH = os.path.join(HERE, "applied.json")
+SKIPPED_PATH = os.path.join(HERE, "skipped.json")
 
 REMOTE = r"""
 import json, sqlite3
@@ -65,6 +66,15 @@ def classify(url):
     return "other"
 
 
+def skipped_keys():
+    if not os.path.exists(SKIPPED_PATH):
+        return set()
+    try:
+        return set(json.load(open(SKIPPED_PATH, encoding="utf-8")).keys())
+    except Exception:
+        return set()
+
+
 def url_key(url):
     import hashlib
     return hashlib.sha1(url.strip().encode("utf-8")).hexdigest()[:16]
@@ -107,7 +117,7 @@ def main():
         if os.path.exists(QUEUE_PATH):
             print("Keeping the existing queue.json.")
         return 1
-    done = applied_keys()
+    done = applied_keys() | skipped_keys()
     fresh = []
     for it in items:
         if url_key(it["url"]) in done:
@@ -119,7 +129,7 @@ def main():
     with open(QUEUE_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
     blocked = sum(1 for x in fresh if x["ats"] == "blocked")
-    print("Queue: %d new of %d (skipped %d already applied, %d blocked platforms)"
+    print("Queue: %d new of %d (skipped %d applied or dropped, %d blocked platforms)"
           % (len(fresh), len(items), len(items) - len(fresh), blocked))
     for i, it in enumerate(fresh[:10], 1):
         print("  %2d. fit %-4s %s" % (i, it.get("fit"), (it.get("title") or "")[:70]))
