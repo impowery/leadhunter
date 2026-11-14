@@ -81,6 +81,10 @@ def main():
 
     item = items[wanted - 1]
     url = item["url"]
+    if item.get("ats") == "blocked" and "--all" not in args:
+        print("Blocked platform (autofill not allowed there):", url)
+        print("Use --all to fill it anyway, or pick another item with --list.")
+        return 1
     if autofill.is_applied(url):
         print("Already applied:", url)
         items.pop(wanted - 1)
