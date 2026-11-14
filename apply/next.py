@@ -98,9 +98,12 @@ def main():
     print("Source:", item.get("source"), "| fit:", item.get("fit"))
     print("URL:   ", url)
     print("Letter:", "%d chars" % len(letter) if letter else "none")
+    profile = autofill.load_profile()
+    cv_path, lane = autofill.pick_cv(profile, title=item.get("title", ""), url=url)
+    print("CV:    ", lane, "->", os.path.basename(cv_path))
     print()
 
-    result = autofill.run(url, autofill.load_profile(), letter=letter, steps=0)
+    result = autofill.run(url, profile, letter=letter, steps=0, cv_path=cv_path)
     print()
     print("Skipped:", ", ".join(result["skipped"][:10]) or "nothing")
     print()

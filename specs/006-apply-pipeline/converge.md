@@ -49,3 +49,19 @@
   пропуски видны в строке `Skipped`.
 - Кэш письма не инвалидируется при повторной генерации письма ботом: удалять
   `apply/letters/<key>.txt` вручную, если письмо перегенерировано.
+
+## Дополнение: выбор CV под вакансию
+
+- `apply/profile.json` → `cv_variants`: `general`, `trading_ops`, `crypto_ops`, `ai`, `payments`.
+  `general` указывает на `C:/Users/Андрей/Desktop/Мои резюме/CV.pdf` (личный мастер-файл,
+  правки в нём подхватываются автоматически). Остальные версии лежат в `resume/`.
+- `pick_cv()`: счёт совпадений по названию вакансии и URL, при равенстве выигрывает
+  слово, которое стоит раньше в заголовке. Ключевые слова матчатся по границе слова:
+  без этого «rag» совпадал с «coverage» и Alpaca получала AI-резюме.
+- В CLI заголовок берётся из `page.title()` после открытия страницы; в `next.py` —
+  из очереди. Флаг `--cv <lane>` переопределяет выбор вручную.
+
+Проверено на 7 заголовках: Crypto Operations → crypto_ops, Middle Office → trading_ops,
+Trading Operations → trading_ops, AI Automation (n8n) → ai, Stablecoin Payments → payments,
+Backend Python и Marketing → general. Живой прогон на Alpaca прикрепил
+`Andrey_Mashkin_Crypto_Operations.pdf`.

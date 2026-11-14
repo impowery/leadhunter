@@ -539,8 +539,53 @@ def fill_add_answer(page, profile):
     return done
 
 
-def attach_cv(page, profile):
-    path = os.path.abspath(os.path.join(HERE, profile.get("cv_path", "")))
+CV_RULES = [
+    ("payments", ("stablecoin", "crypto payment", "payment operations", "payment engineer",
+                  "payment infrastructure", "payments", "on-ramp", "off-ramp", "merchant", "psp")),
+    ("ai", ("ai", "llm", "mcp", "automation", "integration", "n8n", "zapier", "make.com",
+            "rag", "agent", "agentic", "workflow", "prompt")),
+    ("crypto_ops", ("crypto operations", "exchange operations", "trade surveillance", "on-chain",
+                    "digital asset operations", "digital assets", "custody", "crypto ops")),
+    ("trading_ops", ("trading operations", "middle office", "trade operations", "back office",
+                     "reconciliation", "brokerage operations", "clearing", "settlement",
+                     "trade support", "operations analyst", "post-trade", "trade lifecycle")),
+]
+
+
+def _hits(hay, words):
+    """Return (hits, first position). Position breaks ties: the word that opens
+    the job title describes the role better than one buried in the description."""
+    hits, first = 0, 10 ** 6
+    for w in words:
+        m = re.search(r"\b" + re.escape(w.strip()), hay)
+        if m:
+            hits += 1
+            first = min(first, m.start())
+    return hits, first
+
+
+def pick_cv(profile, title="", url="", override=""):
+    """Choose the CV variant for this job. Returns (absolute path, lane name)."""
+    variants = profile.get("cv_variants") or {}
+    hay = (str(title) + " " + str(url)).lower()
+    if override:
+        lane = override if override in variants else "general"
+    else:
+        scored = {}
+        for lane, words in CV_RULES:
+            hits, first = _hits(hay, words)
+            if hits:
+                scored[lane] = (hits, -first)
+        if scored:
+            lane = max(scored, key=lambda k: scored[k])
+        else:
+            lane = "general"
+    rel = variants.get(lane) or profile.get("cv_path") or ""
+    return os.path.abspath(os.path.join(HERE, rel)), lane
+
+
+def attach_cv(page, profile, cv_path=""):
+    path = cv_path or os.path.abspath(os.path.join(HERE, profile.get("cv_path", "")))
     if not os.path.exists(path):
         return "CV file not found: " + path
     inputs = page.query_selector_all("input[type=file]")
@@ -646,6 +691,10 @@ def parse_args(argv):
                 steps = 0
             i += 2
             continue
+        if arg == "--cv" and i + 1 < len(argv):
+            flags.add("cv=" + argv[i + 1])
+            i += 2
+            continue
         if arg.startswith("--"):
             flags.add(arg[2:])
             i += 1
@@ -656,7 +705,7 @@ def parse_args(argv):
     return url, steps, flags
 
 
-def run(url, profile, letter="", headless=None, steps=0, keep_open=None):
+def run(url, profile, letter="", headless=None, steps=0, keep_open=None, cv_path=""):
     """Fill the form for one job URL. Never clicks Submit."""
     if headless is None:
         headless = os.getenv("AUTOFILL_HEADLESS", "0") == "1"
@@ -681,7 +730,14 @@ def run(url, profile, letter="", headless=None, steps=0, keep_open=None):
         combos += fill_combos(page, profile)
         radios = fill_radios(page, profile)
         steps_done = advance_steps(page, steps)
-        cv = attach_cv(page, profile)
+        if not cv_path:
+            try:
+                page_title = page.title() or ""
+            except Exception:
+                page_title = ""
+            cv_path, lane = pick_cv(profile, title=page_title, url=url)
+            print("CV:    ", lane, "->", os.path.basename(cv_path))
+        cv = attach_cv(page, profile, cv_path)
 
         shot = os.path.join(HERE, "last_fill.png")
         try:
@@ -726,6 +782,10 @@ def main():
                 pass
         return
     profile = load_profile()
+    cv_override = ""
+    for f in flags:
+        if f.startswith("cv="):
+            cv_override = f[3:]
     applied = is_applied(url)
     print("URL:", url)
     if applied and "force" not in flags:
@@ -734,7 +794,11 @@ def main():
         return
     letter, source = letter_for(url, profile)
     print("Letter:", source)
-    run(url, profile, letter=letter, steps=steps)
+    cv_path = ""
+    if cv_override:
+        cv_path, lane = pick_cv(profile, url=url, override=cv_override)
+        print("CV:    ", lane, "->", os.path.basename(cv_path))
+    run(url, profile, letter=letter, steps=steps, cv_path=cv_path)
     if "mark" in flags:
         count = mark_applied(url)
         print("Marked applied (%d total)." % count)
