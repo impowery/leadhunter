@@ -1095,19 +1095,36 @@ def parse_remote_co():
     return leads
 
 
-def parse_wwr():
-    print("[WeWorkRemotely] Fetching RSS...")
-    feeds = [
-        "https://weworkremotely.com/remote-jobs.rss",
-        "https://weworkremotely.com/categories/remote-programming-jobs.rss",
-        "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss",
+def _wwr_config():
+    """Registry is loaded later in the file, so read it at call time."""
+    cfg = ((SOURCES.get("rss_sources") or {}).get("weworkremotely") or {})
+    feeds = cfg.get("feeds") or [
         "https://weworkremotely.com/categories/remote-management-and-finance-jobs.rss",
-        "https://weworkremotely.com/categories/remote-product-jobs.rss",
-        "https://weworkremotely.com/categories/remote-customer-support-jobs.rss",
     ]
+    return feeds, bool(cfg.get("use_ats_apply_link", True))
+
+WWR_SKIP_LINK = re.compile(
+    r"weworkremotely\.com|facebook\.com|twitter\.com|x\.com|linkedin\.com|youtube\.com|"
+    r"instagram\.com|cloudfront|schema\.org|w3\.org|googleapis\.com"
+)
+
+
+def _ats_apply_link(desc):
+    """First employer apply link that points at a form we can fill from a browser."""
+    for lnk in re.findall(r'href="(https?://[^"]+)"', desc or ""):
+        if WWR_SKIP_LINK.search(lnk):
+            continue
+        if is_applyable(lnk):
+            return lnk
+    return ""
+
+
+def parse_wwr():
+    WWR_FEEDS, WWR_USE_ATS = _wwr_config()
+    print("[WeWorkRemotely] Fetching RSS (narrow: finance category)...")
     leads = []
     seen_urls = set()
-    for feed in feeds:
+    for feed in WWR_FEEDS:
         raw = fetch_url(feed, timeout=20)
         if not raw:
             continue
@@ -1121,29 +1138,21 @@ def parse_wwr():
                 title = child("title")
                 url = child("link") or child("guid")
                 desc = child("description")
-                apply_links = []
-                if desc:
-                    for lnk in re.findall(r'href="(https?://[^"]+)"', desc):
-                        if re.search(
-                            r"weworkremotely\.com|facebook\.com|twitter\.com|x\.com|"
-                            r"linkedin\.com|youtube\.com|instagram\.com|cloudfront|"
-                            r"schema\.org|w3\.org|googleapis\.com",
-                            lnk,
-                        ):
-                            continue
-                        if lnk not in apply_links:
-                            apply_links.append(lnk)
-                if title and url and url not in seen_urls:
-                    seen_urls.add(url)
-                    lead = {"title": title[:200], "url": url, "source": "WeWorkRemotely",
-                            "description": (desc or "")[:800],
-                            "posted_at": parse_lead_date(child("pubDate"))}
-                    if apply_links:
-                        lead["apply_links"] = apply_links[:3]
-                    leads.append(lead)
+                if not title or not url:
+                    continue
+                apply_url = _ats_apply_link(desc) if WWR_USE_ATS else ""
+                final_url = apply_url or url
+                if final_url in seen_urls:
+                    continue
+                seen_urls.add(final_url)
+                source = "WWW " + final_url.split("/")[2] if apply_url else "WeWorkRemotely"
+                leads.append({"title": title[:200], "url": final_url,
+                              "source": source, "description": (desc or "")[:800],
+                              "posted_at": parse_lead_date(child("pubDate"))})
         except Exception as e:
             print(f"  [WARN] WWR RSS error: {e}")
-    print(f"  {len(leads)} leads")
+    direct = sum(1 for l in leads if l["source"].startswith("WWW "))
+    print(f"  {len(leads)} leads ({direct} with a fillable ATS form)")
     return leads
 
 

@@ -129,7 +129,6 @@
     "AutomationRoles",
     "Solana",
     "Web3Career",
-    "WeWorkRemotely",
     "Reddit",
     "Remotive",
     "WorkingNomads",
@@ -174,5 +173,15 @@
       "test task",
       "trial task"
     ]
+  },
+  "rss_sources": {
+    "weworkremotely": {
+      "enabled": true,
+      "use_ats_apply_link": true,
+      "feeds": [
+        "https://weworkremotely.com/categories/remote-management-and-finance-jobs.rss"
+      ],
+      "_note": "narrow: finance/management category only; when the advert links to an ATS form, that URL is used so the job can be applied to from the browser"
+    }
   }
 }
