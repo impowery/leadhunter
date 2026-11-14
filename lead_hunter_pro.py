@@ -1620,6 +1620,31 @@ def passes_prefilter(lead):
     return any(h in body for h in NARROW_BODY_HINTS)
 
 
+_ELIG = SOURCES.get("eligibility") or {}
+REQUIRE_REMOTE = bool(_ELIG.get("require_remote", False))
+ALLOW_GEO = [str(x).lower() for x in (_ELIG.get("allow_geo") or [])]
+DENY_GEO = [str(x).lower() for x in (_ELIG.get("deny_geo") or [])]
+
+
+def passes_location(location):
+    """Drop onsite/hub jobs and remote jobs locked to a region we cannot take.
+
+    Board locations look like 'Remote - USA', 'Remote - APAC', 'Hong Kong; Singapore',
+    'Menlo Park, CA; New York, NY'. Empty location is kept: better to score it than
+    lose a remote-first board that leaves the field blank.
+    """
+    if not REQUIRE_REMOTE:
+        return True
+    loc = (location or "").strip().lower()
+    if not loc:
+        return True
+    if not any(k in loc for k in ("remote", "anywhere", "distributed", "work from home")):
+        return False
+    if any(k in loc for k in DENY_GEO):
+        return False
+    return True
+
+
 def _crypto_ops_relevant(text, title=""):
     """Keep a board job only when the title is operational or the body is dense with ops terms."""
     tl = (title or "").lower()
@@ -1633,6 +1658,7 @@ def _crypto_ops_relevant(text, title=""):
 
 
 def parse_greenhouse_boards():
+    skipped_loc = {}
     print("[Greenhouse] Fetching crypto ops boards...", flush=True)
     leads = []
     for token in GREENHOUSE_BOARDS:
@@ -1657,7 +1683,12 @@ def parse_greenhouse_boards():
             desc = re.sub(r"\s+", " ", desc).strip()
             if not _crypto_ops_relevant(desc[:5000], title):
                 continue
-            lead = {"title": title[:200], "url": url,
+            loc_obj = job.get("location") or {}
+            location = loc_obj.get("name", "") if isinstance(loc_obj, dict) else str(loc_obj)
+            if not passes_location(location):
+                skipped_loc["gh"] = skipped_loc.get("gh", 0) + 1
+                continue
+            lead = {"title": title[:200], "url": url, "location": location[:80],
                     "source": "Greenhouse " + token, "description": desc[:3000]}
             posted = parse_lead_date(job.get("updated_at") or job.get("first_published"))
             if posted is not None:
@@ -1668,11 +1699,15 @@ def parse_greenhouse_boards():
                 break
         if picked:
             print("  " + token + ": " + str(picked), flush=True)
+    if skipped_loc:
+        print("  [Location] dropped %s (onsite or geo-locked)"
+              % ", ".join("%s %d" % (k, v) for k, v in skipped_loc.items()), flush=True)
     print("  " + str(len(leads)) + " crypto ops jobs", flush=True)
     return leads
 
 
 def parse_lever_boards():
+    skipped_loc = {}
     print("[Lever] Fetching crypto ops boards...", flush=True)
     leads = []
     for token in LEVER_BOARDS:
@@ -1694,7 +1729,12 @@ def parse_lever_boards():
             desc = re.sub(r"\s+", " ", desc).strip()
             if not _crypto_ops_relevant(title + " " + desc[:5000]):
                 continue
-            lead = {"title": title[:200], "url": url,
+            cats = job.get("categories") or {}
+            location = str(job.get("workplaceType") or "") + " " + str(cats.get("location") or "")
+            if not passes_location(location):
+                skipped_loc["lever"] = skipped_loc.get("lever", 0) + 1
+                continue
+            lead = {"title": title[:200], "url": url, "location": location.strip()[:80],
                     "source": "Lever " + token, "description": desc[:3000]}
             posted = parse_lead_date(str(job.get("createdAt") or ""))
             if posted is not None:
@@ -1705,11 +1745,15 @@ def parse_lever_boards():
                 break
         if picked:
             print("  " + token + ": " + str(picked), flush=True)
+    if skipped_loc:
+        print("  [Location] dropped %s (onsite or geo-locked)"
+              % ", ".join("%s %d" % (k, v) for k, v in skipped_loc.items()), flush=True)
     print("  " + str(len(leads)) + " crypto ops jobs", flush=True)
     return leads
 
 
 def parse_ashby_boards():
+    skipped_loc = {}
     print("[Ashby] Fetching crypto ops boards...", flush=True)
     leads = []
     for token in ASHBY_BOARDS:
@@ -1733,7 +1777,14 @@ def parse_ashby_boards():
             desc = re.sub(r"\s+", " ", desc).strip()
             if not _crypto_ops_relevant(title + " " + desc[:5000]):
                 continue
-            lead = {"title": title[:200], "url": url,
+            loc = job.get("location") or ""
+            if isinstance(loc, list):
+                loc = " ".join(str(x) for x in loc)
+            location = ("remote " if job.get("isRemote") else "") + str(loc)
+            if not passes_location(location):
+                skipped_loc["ashby"] = skipped_loc.get("ashby", 0) + 1
+                continue
+            lead = {"title": title[:200], "url": url, "location": location[:80],
                     "source": "Ashby " + token, "description": desc[:3000]}
             posted = parse_lead_date(str(job.get("publishedAt") or job.get("updatedAt") or ""))
             if posted is not None:
@@ -1744,6 +1795,9 @@ def parse_ashby_boards():
                 break
         if picked:
             print("  " + token + ": " + str(picked), flush=True)
+    if skipped_loc:
+        print("  [Location] dropped %s (onsite or geo-locked)"
+              % ", ".join("%s %d" % (k, v) for k, v in skipped_loc.items()), flush=True)
     print("  " + str(len(leads)) + " crypto ops jobs", flush=True)
     return leads
 

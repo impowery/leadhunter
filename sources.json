@@ -183,5 +183,37 @@
       ],
       "_note": "narrow: finance/management category only; when the advert links to an ATS form, that URL is used so the job can be applied to from the browser"
     }
+  },
+  "eligibility": {
+    "require_remote": true,
+    "allow_geo": [
+      "apac",
+      "asia",
+      "worldwide",
+      "global",
+      "anywhere",
+      "emea",
+      "europe",
+      "middle east",
+      "remote"
+    ],
+    "deny_geo": [
+      "usa",
+      "u.s.",
+      "united states",
+      "americas",
+      "canada",
+      "uk",
+      "united kingdom",
+      "latam",
+      "latin america",
+      "india",
+      "australia",
+      "new zealand",
+      "japan only",
+      "korea only",
+      "singapore only"
+    ],
+    "_note": "boards list location like 'Remote - USA' or 'Hong Kong; Singapore'. Onsite/hub jobs are dropped; remote-but-geo-locked jobs are dropped unless the region is APAC, worldwide or EMEA."
   }
 }
