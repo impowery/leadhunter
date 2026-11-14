@@ -1,0 +1,158 @@
+{
+  "_comment": "Source registry. Edit here, not in code. verified_at = date the board was checked against its API.",
+  "verified_at": "2026-11-14",
+  "ats_boards": {
+    "greenhouse": [
+      {
+        "board": "alpaca",
+        "enabled": true,
+        "note": "crypto/brokerage ops, 9 ops jobs"
+      },
+      {
+        "board": "robinhood",
+        "enabled": true,
+        "note": "asset movement, brokerage ops, 10"
+      },
+      {
+        "board": "coinbase",
+        "enabled": true,
+        "note": "broker dealer operations, 18"
+      },
+      {
+        "board": "okx",
+        "enabled": true,
+        "note": "treasury, finance ops, 19"
+      },
+      {
+        "board": "bybit",
+        "enabled": true,
+        "note": "asset/wallet operations, 12"
+      },
+      {
+        "board": "bitgo",
+        "enabled": true,
+        "note": "financial operations, onboarding, 5"
+      },
+      {
+        "board": "bitpanda",
+        "enabled": true,
+        "note": "aml operations, 6"
+      },
+      {
+        "board": "adyen",
+        "enabled": true,
+        "note": "onboarding, cdd, 14"
+      },
+      {
+        "board": "gemini",
+        "enabled": true,
+        "note": "fraud operations, 2"
+      },
+      {
+        "board": "binance",
+        "enabled": true,
+        "note": "binance accelerator programs, 29"
+      },
+      {
+        "board": "b2c2",
+        "enabled": true,
+        "note": "kyc onboarding, 2"
+      },
+      {
+        "board": "aurosglobal",
+        "enabled": true,
+        "note": "0 ops now, cheap to keep"
+      },
+      {
+        "board": "gsrmarkets",
+        "enabled": true,
+        "note": "0 ops now, cheap to keep"
+      },
+      {
+        "board": "stripe",
+        "enabled": false,
+        "note": "786 jobs, 58 noisy ops: enable only with narrow prefilter"
+      },
+      {
+        "board": "kraken",
+        "enabled": false,
+        "note": "board token unknown, 404 on probe"
+      }
+    ],
+    "lever": [
+      {
+        "board": "nium",
+        "enabled": true,
+        "note": "financial reconciliation, payment operations, 5"
+      },
+      {
+        "board": "wintermute-trading",
+        "enabled": true,
+        "note": "0 ops now, keep polling"
+      },
+      {
+        "board": "ambergroup",
+        "enabled": true,
+        "note": "0 ops now, keep polling"
+      }
+    ],
+    "ashby": [
+      {
+        "board": "paxos",
+        "enabled": true,
+        "note": "operational risk, 2"
+      },
+      {
+        "board": "bitvavo",
+        "enabled": true,
+        "note": "custody, 2"
+      },
+      {
+        "board": "keyrock",
+        "enabled": true,
+        "note": "compliance, 1"
+      },
+      {
+        "board": "prelude",
+        "enabled": true,
+        "note": "compliance support, 1"
+      },
+      {
+        "board": "airwallex",
+        "enabled": false,
+        "note": "484 jobs, 35 noisy: mostly product/revenue ops"
+      }
+    ]
+  },
+  "disabled_sources": [
+    "Jobicy",
+    "AutomationRoles",
+    "Solana",
+    "Web3Career",
+    "WeWorkRemotely",
+    "Reddit",
+    "Remotive",
+    "WorkingNomads",
+    "Hacker News",
+    "Telegram @jobstash",
+    "Telegram @forpython",
+    "Telegram @job_python",
+    "Telegram @pythonpythonjobs",
+    "Telegram @pydevjob",
+    "Telegram @remotejobs",
+    "Telegram @python_djangojobs",
+    "Telegram @web30job",
+    "Telegram @remote_python_jobs"
+  ],
+  "prefilter": {
+    "enabled": true,
+    "keep_sources": [
+      "Greenhouse",
+      "Lever",
+      "Ashby",
+      "n8n Devs",
+      "n8n Community"
+    ],
+    "_note": "gate = title hints OR narrow body phrases; tuned 2026-11-14 on 7d data: keeps 18%, loses 0 of 35 useful"
+  }
+}

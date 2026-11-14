@@ -53,11 +53,13 @@ GROQ_KEY = os.getenv("GROQ_API_KEY")
 OR_KEY = os.getenv("OPENROUTER_API_KEY")
 OR_KEY2 = os.getenv("OPENROUTER_API_KEY2")
 TH_KEY = os.getenv("TOKENHARBOR_API_KEY")
+TH_KEY2 = os.getenv("TOKENHARBOR_API_KEY2")
 
 groq_client = OpenAI(api_key=GROQ_KEY, base_url="https://api.groq.com/openai/v1") if GROQ_KEY else None
 or_client = OpenAI(api_key=OR_KEY, base_url="https://openrouter.ai/api/v1") if OR_KEY else None
 or_client2 = OpenAI(api_key=OR_KEY2, base_url="https://openrouter.ai/api/v1") if OR_KEY2 else None
 th_client = OpenAI(api_key=TH_KEY, base_url="https://tokenharbor.ai/v1") if TH_KEY else None
+th_client2 = OpenAI(api_key=TH_KEY2, base_url="https://tokenharbor.ai/v1") if TH_KEY2 else None
 
 TG_API_ID = int(os.getenv("TG_API_ID", "0"))
 TG_API_HASH = os.getenv("TG_API_HASH", "")
@@ -132,6 +134,12 @@ KEYWORDS = [
     "operations analyst", "compliance officer", "payments analyst", "tax analyst",
     "fixed income", "equity research", "credit analyst", "finance associate",
     "trading assistant", "wealth", "client service", "payments operations",
+    "trade lifecycle", "post-trade", "pre-trade", "break resolution", "cash management",
+    "collateral", "custody", "prime brokerage", "clearing", "derivatives operations",
+    "fund accounting", "asset servicing", "exchange operations", "brokerage operations",
+    "transaction monitoring", "kyt", "on-chain analytics", "stablecoin", "usdc", "usdt",
+    "crypto payments", "payment rails", "wallet auth", "otc operations", "trade settlement",
+    "funding operations", "margin operations", "middle office analyst",
 ]
 
 EXCLUDE = [
@@ -151,6 +159,9 @@ EXCLUDE = [
     "accountant", "accounting", "bookkeeper", "bookkeeping", "controller", "chief accountant",
     "accounts payable", "accounts receivable", "payroll", "audit", "auditor", "auditing",
     "shopify", "node.js", "nodejs", "node js", "typescript", "react", "vue", "django", "fastapi",
+    "python developer", "backend developer", "backend engineer", "full stack", "full-stack",
+    "software engineer", "devops engineer", "data engineer", "ml engineer",
+    "growth", "seo specialist", "seo manager", "copywriter", "content writer", "growth hacker",
 ]
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "leads.db")
@@ -325,7 +336,7 @@ def init_db():
     except Exception:
         pass
     # migration: evidence-based scoring columns
-    for _col in ("fit REAL", "gates TEXT", "evidence TEXT"):
+    for _col in ("fit REAL", "gates TEXT", "evidence TEXT", "track TEXT"):
         try:
             c.execute("ALTER TABLE leads ADD COLUMN " + _col)
             conn.commit()
@@ -464,6 +475,7 @@ LLM_PRICES = {
     "glm-5.3-flash": (0.15, 0.50),
     "gpt-6-luna": (0.10, 0.50),
     "openai/gpt-oss-120b": (0.0, 0.0),
+    "deepseek/deepseek-v4.1-flash-1017": (0.25, 1.00),
     "deepseek/deepseek-chat": (0.27, 1.10),
     "meta-llama/llama-3.3-70b-instruct": (0.12, 0.30),
     "qwen/qwen3.7-flash": (0.05, 0.10),
@@ -485,6 +497,23 @@ if os.getenv("LLM_ESCALATE_MODEL"):
     LLM_ESCALATE_MODELS = [os.getenv("LLM_ESCALATE_MODEL").strip()] + LLM_ESCALATE_MODELS
 
 
+_LLM_BLOCK = {}
+
+
+def _llm_key(model, client=None):
+    return model + "|" + (str(id(client)) if client is not None else "")
+
+
+def _llm_blocked(model, client=None):
+    return _LLM_BLOCK.get(_llm_key(model, client), 0) > time.time()
+
+
+def _llm_block(model, minutes=30, client=None):
+    """Skip a dead provider for a while instead of retrying it for every lead."""
+    _LLM_BLOCK[_llm_key(model, client)] = time.time() + minutes * 60
+    print("  [LLM] " + model + " disabled for " + str(minutes) + " min", flush=True)
+
+
 def _llm_chain(tier="bulk"):
     """Cost-ordered (client, model) chain for one workload tier.
 
@@ -500,10 +529,15 @@ def _llm_chain(tier="bulk"):
     th_paid = [(th_client, m) for m in LLM_BULK_PAID_MODELS] if th_client else []
     th_quality = [(th_client, m) for m in LLM_QUALITY_MODELS] if th_client else []
     th_escalate = [(th_client, m) for m in LLM_ESCALATE_MODELS] if th_client else []
+    th2 = [(th_client2, m) for m in LLM_BULK_MODELS] if th_client2 else []
+    th2_paid = [(th_client2, m) for m in LLM_BULK_PAID_MODELS] if th_client2 else []
+    th2_quality = [(th_client2, m) for m in LLM_QUALITY_MODELS] if th_client2 else []
+    th2_escalate = [(th_client2, m) for m in LLM_ESCALATE_MODELS] if th_client2 else []
     groq = [(groq_client, "openai/gpt-oss-120b")] if groq_client else []
     ors = []
     if or_client:
         ors += [
+            (or_client, "deepseek/deepseek-v4.1-flash-1017"),
             (or_client, "deepseek/deepseek-chat"),
             (or_client, "meta-llama/llama-3.3-70b-instruct"),
             (or_client, "qwen/qwen3.7-flash"),
@@ -515,14 +549,14 @@ def _llm_chain(tier="bulk"):
         ]
 
     if tier == "quality":
-        chain = th_quality + th + ors + groq
+        chain = th_quality + th2_quality + th + th2 + ors + groq
     elif tier == "escalate":
-        chain = th_escalate + th_quality + th + ors + groq
+        chain = th_escalate + th2_escalate + th_quality + th2_quality + th + th2 + ors + groq
     elif os.getenv("LLM_BULK_FREE_FIRST", "1") != "0":
-        chain = th + th_paid + ors + groq
+        chain = th + th2 + th_paid + th2_paid + ors + groq
     else:
         # Escape hatch: paid models first when the free tiers are rate-limited.
-        chain = th_paid + th + ors + groq
+        chain = th_paid + th2_paid + th + th2 + ors + groq
 
     seen = set()
     out = []
@@ -533,7 +567,11 @@ def _llm_chain(tier="bulk"):
         if k not in seen:
             seen.add(k)
             out.append((c, m))
-    return out
+    alive = [(c, m) for c, m in out if not _llm_blocked(m, c)]
+    if not alive:
+        _LLM_BLOCK.clear()
+        return out
+    return alive
 
 
 def _llm_log_usage(tier, model, resp):
@@ -617,7 +655,11 @@ def llm_complete(system, user, max_tokens=200, temperature=0.1, timeout=20, json
     """Try each (client, model) of the tier's chain with one retry each."""
     last_err = ""
     for client, model in _llm_chain(tier):
+        if _llm_blocked(model, client):
+            continue
         for attempt in range(2):
+            if _llm_blocked(model, client):
+                break
             try:
                 kwargs = {}
                 budget = max_tokens
@@ -682,6 +724,12 @@ def llm_complete(system, user, max_tokens=200, temperature=0.1, timeout=20, json
                         _llm_log_usage(tier, model, resp)
                         return raw
             except Exception as e:
+                _e = str(e)
+                if any(s in _e for s in (
+                    "401", "402", "403", "Invalid or revoked", "API key expired",
+                    "Insufficient credits", "failed authentication",
+                )):
+                    _llm_block(model, client=client)
                 print(f"  [WARN] LLM call failed ({model}): {e}", flush=True)
                 last_err = f"{model}: {e}"
             time.sleep(1)
@@ -719,32 +767,13 @@ def llm_score(title, description, allow_senior=False, prompt=None):
             "workflow automation, AI operations, LLM workflow, chatbot, integration, "
             "scraping, data automation, financial operations, trading operations, treasury, "
             "fintech, payments, compliance, risk, and practical SaaS/MVP work.\n"
-            "Finance scoring guide (use these bands, do not auto-boost on the word AI):\n"
-            "- score 8-10: the profile's core craft: n8n/Make/Zapier workflow automation, AI agents, "
-            "LLM integrations, Telegram bots, scraping and data pipelines, delivered as freelance, "
-            "contract or remote projects. These are the best matches.\n"
-            "- score 6-8: finance/trading OPERATIONS roles — trading operations, treasury, "
-            "settlement, reconciliation, payments operations, compliance, risk operations, "
-            "fintech operations, market data, broker/exchange operations, trading support, "
-            "middle/back office, trade settlement.\n"
-            "- score 5-6: Financial Analyst, Trading Assistant, Trust Operations Associate, "
-            "and similar hands-on analyst roles that fit a trading/investment background.\n"
-            "- score 4-5: Portfolio Manager, Credit Analyst, and other senior/strategy finance "
-            "roles where the person is a partial fit.\n"
-            "Score 0-2 for sales, marketing, growth, customer success/support, legal, "
-            "design, video, social media, security, pure frontend/mobile, ML research, "
-            "data science, Solidity/Rust engineering, tutoring, or roles requiring "
-            "independent production coding as the main responsibility. Also score LOW for "
-            "senior/lead/staff/manager roles and office or hybrid roles. Do not raise a "
-            "score merely because the description contains the words AI, API, crypto, or automation.\n"
-            "HARD EXCLUSIONS — ALWAYS set score 0 and verdict \"no\": pure accounting/bookkeeping "
-            "roles (Accountant, Bookkeeper, Controller, Accounts Payable/Receivable, Payroll, Audit, "
-            "Financial Accountant, Tax Accounting) even if they mention automation; and roles that "
-            "are primarily hands-on software engineering in a specific stack (Shopify development, "
-            "Node.js, TypeScript, React, Django, FastAPI) where the person must personally write "
-            "production code. This profile is an AI-automation builder who assembles practical "
-            "workflows and integrations, not a full-time accountant and not a stack-focused "
-            "software engineer.\n\n"
+            "Finance and operations scoring guide (use these bands, do not auto-boost on the word AI):\n"
+            "- score 8-10: TRACK 1 crypto trading operations and middle office: trade support, trade lifecycle, settlement, reconciliation of trades, fees, cash and PnL, treasury and cash management, exchange and brokerage operations, post-trade, break resolution, exception handling, KYT and transaction monitoring analysts. Also TRACK 2 AI automation contracts where the deliverable is a production system: MCP servers, RAG pipelines, LLM integrations, Telegram bots, scraping pipelines, deployed on a VPS with monitoring and alerts. These are the best matches.\n"
+            "- score 6-8: adjacent finance operations such as fintech operations, payments operations, risk operations, custody and asset servicing, fund accounting; and TRACK 3 stablecoin payments and crypto integration roles such as non-custodial checkout, on-chain payment detection, invoice matching, reorg handling and wallet auth.\n"
+            "- score 5-6: Financial Analyst, Trading Assistant, Operations Analyst and similar hands-on analyst roles built on Excel and SQL.\n"
+            "- score 4-5: Portfolio Manager, Credit Analyst and other senior or strategy finance roles where the person is only a partial fit.\n"
+            "Score 0-2 for pure software engineering roles in a named stack (Python developer, backend developer, full stack, software engineer, DevOps engineer), generic AI engineer or ML roles without an automation niche, data science, ML research, growth, marketing, SEO, sales, customer support, design, video, security engineering, accounting and bookkeeping, and senior, lead or head roles. Also score LOW for office or hybrid roles. Do not raise a score merely because the description contains AI, API, crypto or automation.\n"
+            "HARD EXCLUSIONS, ALWAYS set score 0 and verdict \"no\": pure accounting and bookkeeping roles (Accountant, Bookkeeper, Controller, Accounts Payable or Receivable, Payroll, Audit, Tax Accounting) even if they mention automation; generic software engineering roles where the person must personally write production code in a named stack (Shopify, Node.js, TypeScript, React, Vue, Django, FastAPI); growth and marketing roles; and hands-on customer support roles.\n"
             "Return ONLY valid JSON. Score is computed by the system from your dimensions, so do not output score.\n"
             "- type: \"client\" | \"job\" | \"partner\"\n"
             "- urgency: \"low\" | \"medium\" | \"high\"\n"
@@ -755,8 +784,9 @@ def llm_score(title, description, allow_senior=False, prompt=None):
             "- matched_aspects: list of short strings\n"
             "- reason: one short sentence (max 7 words)\n"
             "- risk: one short string (biggest mismatch or gap)\n"
+            "- track: one of \"ops\" | \"automation\" | \"payments\" | \"other\" for the three target tracks\n"
             "Evidence rules: copy the exact phrase from the description, never paraphrase, and keep each quote under 12 words. If no exact phrase exists, status must be missing and evidence empty.\n"
-            "Gate rules: direction checks whether the remit matches the profile two tracks (AI automation, finance and trading operations). constraints checks remote location and stated pay (fail when hourly pay is below 10 USD, a fixed project is below 200 USD, or the role is onsite or hybrid). eligibility checks seniority and hard requirements the person cannot meet.\n"
+            "Gate rules: direction checks whether the remit matches one of the three profile tracks (crypto trading operations and middle office, AI automation contracts, stablecoin payments). constraints checks remote location and stated pay (fail when hourly pay is below 10 USD, a fixed project is below 200 USD, or the role is onsite or hybrid). eligibility checks seniority and hard requirements the person cannot meet.\n"
             "Dimension rules: direction is fit of the work itself; capability is proven ability from the profile; scope is size and seniority match; preferences are remote work, freelance or contract, no heavy production coding, no accounting.\n\n"
             + (senior_rule if not allow_senior else "")
             + "Start your reply with { and end with }. No prose before or after the JSON. If the lead is unrelated, set all dimensions to 0 and gates.eligibility to fail."
@@ -857,6 +887,8 @@ def llm_score(title, description, allow_senior=False, prompt=None):
     data["band"] = band
     data["decision"] = decision
     data["uncited"] = uncited
+    track = str(data.get("track", "") or "").strip().lower()
+    data["track"] = track if track in ("ops", "automation", "payments") else "other"
     data["verdict"] = "fit" if decision == "recommend" else ("partial" if decision == "clarify" else "no")
     data["score"] = round(fit / 10.0, 1)
     return data
@@ -1470,6 +1502,239 @@ def parse_nodesk():
     return leads[:60]
 
 
+CRYPTO_OPS_HINTS = [
+    "trading operations", "middle office", "trade support", "trade lifecycle", "post-trade",
+    "settlement", "reconciliation", "treasury", "cash management", "clearing", "custody",
+    "prime brokerage", "exchange operations", "brokerage operations", "transaction monitoring",
+    "kyc", "kyt", "aml", "on-chain", "stablecoin", "payments operations", "fund accounting",
+    "asset servicing", "otc", "derivatives operations", "collateral", "margin",
+]
+
+# --- source registry (sources.json) -----------------------------------------
+def _load_sources():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sources.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print("  [WARN] sources.json not loaded (%s), using built-in lists"
+              % type(e).__name__, flush=True)
+        return {}
+
+SOURCES = _load_sources()
+
+
+def _enabled_boards(ats, fallback):
+    sec = (SOURCES.get("ats_boards") or {}).get(ats) or []
+    boards = [b.get("board") for b in sec
+              if isinstance(b, dict) and b.get("board") and b.get("enabled", True)]
+    return boards or fallback
+
+
+GREENHOUSE_BOARDS = _enabled_boards("greenhouse", ["alpaca", "b2c2", "binance"])
+LEVER_BOARDS = _enabled_boards("lever", ["wintermute-trading", "ambergroup"])
+ASHBY_BOARDS = _enabled_boards("ashby", [])
+
+DISABLED_SOURCES = [str(x).lower() for x in (SOURCES.get("disabled_sources") or [])]
+
+
+def source_disabled(name):
+    n = (name or "").lower()
+    return any(d and d in n for d in DISABLED_SOURCES)
+
+
+def _maybe(label, fn):
+    """Call a parser unless its source is disabled in sources.json."""
+    if source_disabled(label):
+        print("[Skip] " + label + " (disabled in sources.json)", flush=True)
+        return []
+    return fn()
+
+
+TELEGRAM_SOURCES = [c for c in TELEGRAM_SOURCES if not source_disabled("Telegram @" + c["name"])]
+
+
+TITLE_HINTS = [
+    "trading operations", "broker-dealer operations", "brokerage operations",
+    "operations associate", "operations analyst", "operations specialist",
+    "operations coordinator", "middle office", "trade support", "settlement",
+    "settlements", "reconciliation", "treasury", "payments", "clearing", "custody",
+    "kyc", "kyt", "aml", "compliance", "transaction monitoring", "on-chain",
+    "stablecoin", "fund accounting", "asset servicing", "trade lifecycle",
+]
+
+BOARD_TITLE_SKIP = [
+    "engineer", "developer", "product manager", "commander", "intern", "researcher",
+    "quant", "counsel", "designer", "marketing", "sales", "business development",
+]
+
+AUTOMATION_HINTS = [
+    "automation", "llm", "mcp", "rag", "n8n", "zapier", "make.com", "agentic",
+    "agent", "workflow", "integration", "scraping", "playwright", "telegram bot",
+]
+
+_PF = SOURCES.get("prefilter") or {}
+PREFILTER_ON = bool(_PF.get("enabled", False))
+PREFILTER_KEEP = [str(x).lower() for x in (_PF.get("keep_sources") or [])]
+
+TITLE_EXTRA_HINTS = [
+    "ai engineer", "automation engineer", "integration engineer", "market analyst",
+    "research analyst", "support analyst", "ops", "operations",
+]
+
+NARROW_BODY_HINTS = [
+    "reconciliation", "trade lifecycle", "break investigation", "middle office",
+    "post-trade", "settlement", "trade support", "asset servicing",
+]
+
+
+def passes_prefilter(lead):
+    """Cheap gate before any LLM call.
+
+    Tuned on the last 7 days of real data (1546 leads, 35 known useful): keeps
+    18% and loses none of the useful ones. Counting the wide body vocabulary was
+    useless, everything passed; the title is the only reliable signal.
+    """
+    if not PREFILTER_ON:
+        return True
+    src = (lead.get("source") or "").lower()
+    if any(k in src for k in PREFILTER_KEEP):
+        return True
+    title = (lead.get("title") or "").lower()
+    if any(h in title for h in TITLE_HINTS + AUTOMATION_HINTS + TITLE_EXTRA_HINTS):
+        return True
+    body = (lead.get("description") or "").lower()[:4000]
+    return any(h in body for h in NARROW_BODY_HINTS)
+
+
+def _crypto_ops_relevant(text, title=""):
+    """Keep a board job only when the title is operational or the body is dense with ops terms."""
+    tl = (title or "").lower()
+    if any(b in tl for b in BOARD_TITLE_SKIP):
+        return False
+    if any(h in tl for h in TITLE_HINTS):
+        return True
+    t = (text or "").lower()
+    hits = sum(1 for h in CRYPTO_OPS_HINTS if h in t)
+    return hits >= 3
+
+
+def parse_greenhouse_boards():
+    print("[Greenhouse] Fetching crypto ops boards...", flush=True)
+    leads = []
+    for token in GREENHOUSE_BOARDS:
+        try:
+            raw = fetch_url(
+                "https://boards-api.greenhouse.io/v1/boards/" + token + "/jobs?content=true",
+                timeout=25,
+            )
+            if not raw:
+                continue
+            data = json.loads(raw)
+        except Exception as e:
+            print("  [Greenhouse:" + token + "] " + str(e)[:80], flush=True)
+            continue
+        picked = 0
+        for job in data.get("jobs", []):
+            title = (job.get("title") or "").strip()
+            url = job.get("absolute_url") or ""
+            if not title or not url:
+                continue
+            desc = re.sub(r"<[^>]+>", " ", html.unescape(job.get("content") or ""))
+            desc = re.sub(r"\s+", " ", desc).strip()
+            if not _crypto_ops_relevant(desc[:5000], title):
+                continue
+            lead = {"title": title[:200], "url": url,
+                    "source": "Greenhouse " + token, "description": desc[:3000]}
+            posted = parse_lead_date(job.get("updated_at") or job.get("first_published"))
+            if posted is not None:
+                lead["posted_at"] = posted
+            leads.append(lead)
+            picked += 1
+            if picked >= 15:
+                break
+        if picked:
+            print("  " + token + ": " + str(picked), flush=True)
+    print("  " + str(len(leads)) + " crypto ops jobs", flush=True)
+    return leads
+
+
+def parse_lever_boards():
+    print("[Lever] Fetching crypto ops boards...", flush=True)
+    leads = []
+    for token in LEVER_BOARDS:
+        try:
+            raw = fetch_url("https://api.lever.co/v0/postings/" + token + "?mode=json", timeout=25)
+            if not raw:
+                continue
+            data = json.loads(raw)
+        except Exception as e:
+            print("  [Lever:" + token + "] " + str(e)[:80], flush=True)
+            continue
+        picked = 0
+        for job in data if isinstance(data, list) else []:
+            title = (job.get("text") or "").strip()
+            url = job.get("hostedUrl") or ""
+            if not title or not url:
+                continue
+            desc = str(job.get("descriptionPlain") or "")
+            desc = re.sub(r"\s+", " ", desc).strip()
+            if not _crypto_ops_relevant(title + " " + desc[:5000]):
+                continue
+            lead = {"title": title[:200], "url": url,
+                    "source": "Lever " + token, "description": desc[:3000]}
+            posted = parse_lead_date(str(job.get("createdAt") or ""))
+            if posted is not None:
+                lead["posted_at"] = posted
+            leads.append(lead)
+            picked += 1
+            if picked >= 15:
+                break
+        if picked:
+            print("  " + token + ": " + str(picked), flush=True)
+    print("  " + str(len(leads)) + " crypto ops jobs", flush=True)
+    return leads
+
+
+def parse_ashby_boards():
+    print("[Ashby] Fetching crypto ops boards...", flush=True)
+    leads = []
+    for token in ASHBY_BOARDS:
+        try:
+            raw = fetch_url(
+                "https://api.ashbyhq.com/posting-api/job-board/" + token, timeout=25)
+            if not raw:
+                continue
+            data = json.loads(raw)
+        except Exception as e:
+            print("  [Ashby:" + token + "] " + str(e)[:80], flush=True)
+            continue
+        picked = 0
+        for job in data.get("jobs", []):
+            title = (job.get("title") or "").strip()
+            url = job.get("jobUrl") or job.get("applyUrl") or ""
+            if not title or not url:
+                continue
+            desc = str(job.get("descriptionPlain") or job.get("descriptionHtml") or "")
+            desc = re.sub(r"<[^>]+>", " ", html.unescape(desc))
+            desc = re.sub(r"\s+", " ", desc).strip()
+            if not _crypto_ops_relevant(title + " " + desc[:5000]):
+                continue
+            lead = {"title": title[:200], "url": url,
+                    "source": "Ashby " + token, "description": desc[:3000]}
+            posted = parse_lead_date(str(job.get("publishedAt") or job.get("updatedAt") or ""))
+            if posted is not None:
+                lead["posted_at"] = posted
+            leads.append(lead)
+            picked += 1
+            if picked >= 15:
+                break
+        if picked:
+            print("  " + token + ": " + str(picked), flush=True)
+    print("  " + str(len(leads)) + " crypto ops jobs", flush=True)
+    return leads
+
+
 def parse_jobicy():
     print("[Jobicy] Fetching...")
     raw = fetch_url("https://jobicy.com/api/v2/remote-jobs?count=30")
@@ -1788,8 +2053,8 @@ def store_leads(conn, results):
             c.execute(
                 """INSERT OR IGNORE INTO leads
                    (title, source, url, score, fit, type, urgency, budget, matched_aspects,
-                    reason, description, posted_at, gates, evidence)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    reason, description, posted_at, gates, evidence, track)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     r["title"],
                     r["source"],
@@ -1805,6 +2070,7 @@ def store_leads(conn, results):
                     r.get("posted_at"),
                     json.dumps(r.get("gates", {})),
                     json.dumps(r.get("requirements", [])),
+                    r.get("track", "other"),
                 )
             )
             if c.rowcount:
@@ -2642,20 +2908,25 @@ def tg_poll_outcomes():
         time.sleep(1)
 
 
-PROFILE_TEXT = """Andrey Mashkin: AI Automation and Financial Operations Builder, Bangkok (remote worldwide).
-- Solo builder with 15+ years in trading and investments across equities, FX, commodities, and crypto.
-- Built TradeMind Lite: AI trading journal Telegram bot with crypto payments (Plisio).
+PROFILE_TEXT = """Andrey Mashkin: crypto trading operations and automation builder, Bangkok (remote worldwide).
+
+TRACK 1, primary, best odds: Crypto Trading Operations and Middle Office. 15+ years in trading and capital markets across equities, FX, commodities and crypto since 2017. Daily reconciliation of trades, fees, cash and PnL across CEX and on-chain venues; position monitoring, break resolution and exception handling; settlement, treasury and cash management exposure; invoice matching, confirmations and reorg handling. Advanced Excel plus working Python and SQL for automating routine operations.
+TRACK 2, parallel contract income: AI automation and LLM integration delivered as production systems: MCP servers, RAG pipelines, Telegram bots, scraping pipelines, REST integrations, deployed on a Linux VPS with systemd, cron, monitoring, alerts and dashboards.
+TRACK 3, narrow niche, exact matches only: stablecoin payments and crypto integration: non-custodial checkout with USDC, USDT and USDG, on-chain payment detection through Etherscan, Alchemy and TronGrid, invoice matching, confirmation and reorg handling, EIP-4361 wallet auth.
+
+Evidence:
 - Runs 6 algorithmic trading bots (gold, BTC, oil, altcoins) on a small VPS with zero downtime: self-healing health checks, cron dashboards, instant Telegram alerts.
-- DeFi trading infrastructure on Hyperliquid and other top DEXs: partial-close accounting, fees optimization, crash recovery.
-- Builds trading-operations automations: market-data pipelines, risk monitoring, portfolio/PnL reporting, fee reconciliation, trade journals, and broker/exchange integrations.
-- Finance and capital-markets operations background: treasury, settlement, reconciliation, compliance, payments, trading support, middle/back office, and risk operations.
-- Built LeadHunter Pro: profile-matched LLM lead intelligence, data ingestion, freshness filtering, Telegram delivery, and draft workflows.
-- Tech: Python, Telegram Bot API, Cloudflare Workers, OpenRouter (various models), n8n, scraping, VPS/Linux, cron, HTML/CSS/JS.
-- E-commerce automation: logic, orders, payments.
-- Pricing: systems that run without me, priced on value, not hours.
-- English: fluent professional; Russian: native.
-- Links: LinkedIn linkedin.com/in/andrey-mashkin, GitHub github.com/impowery/leadhunter, project page https://luna56.vercel.app.
-- Timezone: Bangkok, UTC+7. Available immediately, remote worldwide."""
+- Backtesting and risk work: SL/TP optimisation, parameter sweeps, intraday replay, Profit Factor and Win Rate analysis.
+- DeFi trading infrastructure on Hyperliquid and Paradex: partial-close accounting, fee optimisation, crash recovery.
+- Built LeadHunter Pro (public GitHub) with an MCP server, evidence-based scoring and Telegram delivery.
+- Built TradeMind Lite: AI trading journal Telegram bot with crypto payments (Plisio).
+- Background covers treasury, settlement, reconciliation, compliance awareness, payments operations, trading support, middle and back office, risk operations.
+- Tech: Python, SQL, Excel, REST APIs, HMAC webhooks, PostgreSQL, SQLite, Docker, nginx, systemd, cron, Linux VPS, Git, Playwright, n8n, LLM integrations, MCP.
+- English fluent professional, Russian native.
+- Links: linkedin.com/in/andrey-mashkin, github.com/impowery/leadhunter, https://luna56.vercel.app.
+- Timezone Bangkok UTC+7, available immediately, remote worldwide.
+
+NOT a fit: pure software engineering roles in a named stack, generic Python or AI engineer roles without an automation niche, ML research, data science, accounting and bookkeeping, sales, marketing and growth, customer support, design, video, security engineering, and senior, lead or head roles."""
 if OWNER_EMAIL:
     PROFILE_TEXT += "\n- Contact: " + OWNER_EMAIL + "."
 
@@ -2774,7 +3045,22 @@ def build_application_kit(lead, email=None):
             print("  [Audit] pass", flush=True)
     except Exception as e:
         print("  [WARN] kit audit failed: " + str(e), flush=True)
+    kit["letter"] = de_dash(kit.get("letter") or "")
+    for _k in list((kit.get("answers") or {}).keys()):
+        kit["answers"][_k] = de_dash(kit["answers"][_k])
     return kit
+
+
+_DASHES = ("\u2014", "\u2013", "\u2011", "\u2012", "\u2015", "\u2212")
+
+
+def de_dash(text):
+    """Replace em/en/non-breaking dashes with plain punctuation."""
+    t = text or ""
+    for ch in _DASHES:
+        t = t.replace(" " + ch + " ", ", ")
+        t = t.replace(ch, "-")
+    return t
 
 
 AUDIT_SYSTEM = (
@@ -3141,6 +3427,9 @@ def leads_to_tg(leads, send_fn=None, with_actions=True):
             msg += f"\n\n<b>{n}. {title}</b>\n⭐ {l.get('score', 0)}/10{fit_txt} · {source}"
             if budget:
                 msg += f"\n💰 {html.escape(budget)}"
+            _track = (l.get("track") or "").strip()
+            if _track and _track != "other":
+                msg += "\ntrack: " + _track
             _gates = l.get("gates") or {}
             _bad = [k for k, v in _gates.items() if v == "fail"]
             _warn = [k for k, v in _gates.items() if v == "flag"]
@@ -3195,9 +3484,9 @@ def run():
 
     all_raw = []
     print("[DBG] parse_hn_jobs...", flush=True)
-    all_raw.extend(parse_hn_jobs())
+    all_raw.extend(_maybe("Hacker News", parse_hn_jobs))
     print("[DBG] parse_reddit...", flush=True)
-    all_raw.extend(parse_reddit_forhire())
+    all_raw.extend(_maybe("Reddit", parse_reddit_forhire))
     print("[DBG] parse_telegram...", flush=True)
     all_raw.extend(parse_telegram_sources())
     print("[DBG] parse_remoteok...", flush=True)
@@ -3205,13 +3494,19 @@ def run():
     print("[DBG] parse_remote_co...", flush=True)
     all_raw.extend(parse_remote_co())
     print("[DBG] parse_wwr...", flush=True)
-    all_raw.extend(parse_wwr())
+    all_raw.extend(_maybe("WeWorkRemotely", parse_wwr))
     print("[DBG] parse_remotive...", flush=True)
-    all_raw.extend(parse_remotive())
+    all_raw.extend(_maybe("Remotive", parse_remotive))
     print("[DBG] parse_workingnomads...", flush=True)
-    all_raw.extend(parse_workingnomads())
+    all_raw.extend(_maybe("WorkingNomads", parse_workingnomads))
     print("[DBG] parse_nodesk...", flush=True)
     all_raw.extend(parse_nodesk())
+    print("[DBG] parse_greenhouse_boards...", flush=True)
+    all_raw.extend(parse_greenhouse_boards())
+    print("[DBG] parse_lever_boards...", flush=True)
+    all_raw.extend(parse_lever_boards())
+    print("[DBG] parse_ashby_boards...", flush=True)
+    all_raw.extend(parse_ashby_boards())
     print("[DBG] parse_himalayas...", flush=True)
     all_raw.extend(parse_himalayas())
     # Arbeitnow disabled: German onsite board, produced noise with zero relevant leads
@@ -3224,15 +3519,15 @@ def run():
     print("[DBG] parse_remoteai...", flush=True)
     all_raw.extend(parse_remoteai())
     print("[DBG] parse_automationroles...", flush=True)
-    all_raw.extend(parse_automationroles())
+    all_raw.extend(_maybe("AutomationRoles", parse_automationroles))
     print("[DBG] parse_jobicy...", flush=True)
-    all_raw.extend(parse_jobicy())
+    all_raw.extend(_maybe("Jobicy", parse_jobicy))
     print("[DBG] parse_web3career...", flush=True)
-    all_raw.extend(parse_web3career())
+    all_raw.extend(_maybe("Web3Career", parse_web3career))
     print("[DBG] parse_jobsdb...", flush=True)
     all_raw.extend(parse_jobsdb())
     print("[DBG] parse_solana_getro...", flush=True)
-    all_raw.extend(parse_solana_getro())
+    all_raw.extend(_maybe("Solana", parse_solana_getro))
     print("[DBG] parse_dynamitejobs...", flush=True)
     all_raw.extend(parse_dynamitejobs())
     # eFinancialCareers disabled: public listing exposes onsite US roles only,
@@ -3246,6 +3541,22 @@ def run():
     dropped_age = before_age - len(all_raw)
     if dropped_age:
         print(f"[Age] Dropped {dropped_age} leads older than {MAX_LEAD_AGE_DAYS} days", flush=True)
+
+    # Prefilter: drop leads with no ops/automation signal before any LLM call
+    if PREFILTER_ON:
+        before_pf = len(all_raw)
+        dropped = {}
+        kept = []
+        for l in all_raw:
+            if passes_prefilter(l):
+                kept.append(l)
+            else:
+                key = l.get("source", "?")
+                dropped[key] = dropped.get(key, 0) + 1
+        all_raw = kept
+        print(f"[Prefilter] Dropped {before_pf - len(kept)} of {before_pf} leads", flush=True)
+        for src, n in sorted(dropped.items(), key=lambda x: -x[1])[:8]:
+            print(f"  [Prefilter] {src}: -{n}", flush=True)
 
     # Per-source collection stats (for the end-of-scan TG summary)
     from collections import Counter
@@ -3349,7 +3660,7 @@ def run():
         hs_scores = [h.get("score", 0) for h in high_scored]
         print(f"[Debug] Before filters: {len(high_scored)} leads >=6, scores={sorted(hs_scores, reverse=True)[:10]}", flush=True)
     # Hard filter: remove Senior/Lead/Director/VP titles (JobsDB exempt — English jobs wanted)
-    senior_pattern = re.compile(r"\b(senior|sr\.?|principal|staff|director|vp\b|vice president|head of)", re.I)
+    senior_pattern = re.compile(r"\b(senior|sr\.?|principal|staff|director|vp\b|vice president|head of|manager)", re.I)
     # Debug: show what gets filtered
     for l in (high_scored or []):
         if l.get("source") != "JobsDB" and senior_pattern.search(l["title"]):
@@ -3374,22 +3685,29 @@ def run():
 
     top_leads = [l for l in high_scored if l.get("score", 0) >= 8]
     mid_leads = [l for l in high_scored if l.get("score", 0) < 8]
+    # Remember leads dropped by the senior/resume/dedup filters so later catch-up
+    # passes never resurface them (sent=-1 means "filtered, never deliver").
+    _kept = {l.get("url") for l in high_scored}
+    for l in new_leads:
+        if (l.get("score") or 0) >= 6 and l.get("url") not in _kept:
+            c2.execute("UPDATE leads SET sent=-1 WHERE url=? AND sent=0", (l.get("url"),))
+    conn.commit()
     if mid_leads:
         print(f"[Digest] {len(mid_leads)} leads (6-7.9) saved for daily digest", flush=True)
     if top_leads:
         print_console(top_leads)
         leads_to_tg(top_leads)
         send_application_kits(top_leads, conn=conn)
-        # Save hashes of sent leads to avoid re-sending after redeploy
+    if high_scored:
+        # Persist delivery state for every surfaced lead, including the 6-7.9
+        # band the daily digest picks up. Before this, mid-band leads from runs
+        # without any 8+ lead were never marked and never delivered.
         with open(sent_file, "a", encoding="utf-8") as f:
             for l in high_scored:
-                h = stable_hash(l["title"][:60] + l.get("source", ""))
-                f.write(h + "\n")
-        # Mark as sent in local DB
+                f.write(stable_hash(l["title"][:60] + l.get("source", "")) + "\n")
         for l in high_scored:
             c2.execute("UPDATE leads SET sent=1 WHERE url=?", (l.get("url"),))
         conn.commit()
-        # Also mark as sent in Supabase
         if HAS_SUPABASE:
             for l in high_scored:
                 try:
