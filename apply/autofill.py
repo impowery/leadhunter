@@ -129,6 +129,11 @@ def letter_for(url, profile):
     if text:
         save_letter(url, text)
         return text, "vps"
+    print("No saved letter for this job, asking the bot to write one (30-60s)...")
+    text = generate_letter_ssh(profile, url)
+    if text:
+        save_letter(url, text)
+        return text, "generated"
     text = read_letter(profile)
     return text, "file" if text else "none"
 
@@ -184,6 +189,38 @@ def match_field(strong, weak):
             if any(re.search(r"\b" + re.escape(w), hay) for w in words):
                 return key
     return None
+
+
+def generate_letter_ssh(profile, url, timeout=200):
+    """Ask the bot on the VPS to write a letter for a job it has not seen yet."""
+    import shlex
+    import shutil
+
+    key = profile.get("ssh_key") or os.path.expanduser("~/.ssh/vps_opencode")
+    host = profile.get("vps") or "root@193.233.19.171"
+    ssh_bin = shutil.which("ssh") or r"C:\Windows\System32\OpenSSH\ssh.exe"
+    try:
+        out = subprocess.run(
+            [ssh_bin, "-i", key,
+             "-o", "StrictHostKeyChecking=no",
+             "-o", "UserKnownHostsFile=/dev/null",
+             "-o", "ConnectTimeout=10",
+             host,
+             "cd /root/LeadHunter && ./venv/bin/python make_letter.py " + shlex.quote(url)],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        print("Letter generation timed out.")
+        return ""
+    except Exception as e:
+        print("Letter generation failed:", str(e)[:120])
+        return ""
+    text = (out.stdout or "").strip()
+    if out.returncode != 0 or len(text) < 200:
+        err = (out.stderr or "").strip().splitlines()
+        print("Letter generation failed:", (err[-1] if err else "no output")[:140])
+        return ""
+    return text
 
 
 def describe(el):

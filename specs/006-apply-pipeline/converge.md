@@ -65,3 +65,18 @@
 Trading Operations → trading_ops, AI Automation (n8n) → ai, Stablecoin Payments → payments,
 Backend Python и Marketing → general. Живой прогон на Alpaca прикрепил
 `Andrey_Mashkin_Crypto_Operations.pdf`.
+
+## Дополнение: письмо на месте (on demand)
+
+- `make_letter.py` (VPS): читает вакансию через API Greenhouse/Lever/Ashby, при
+  неудаче парсит страницу, вызывает `build_application_kit` (письмо + ответы + аудит)
+  и сохраняет результат в `kits`.
+- `autofill.py`: если письма нет ни в кэше, ни в базе, `One Job` просит VPS
+  сгенерировать его (`generate_letter_ssh`, таймаут 200 с) и кэширует локально.
+- Служебный вывод бота уводится в stderr, иначе строки `[LLM] ... 401` попадали в текст письма.
+
+Проверено на `alpaca/jobs/4431262004` (Crypto Operations Associate - APAC):
+сгенерировано 154 слова, аудит переписал письмо (`audit_ok: False`), служебных строк нет.
+
+Ограничение: Greenhouse принимает письмо файлом, а не текстом, поэтому в форму текст
+не вставляется. Нужен шаг «письмо → PDF → во второй file input».
