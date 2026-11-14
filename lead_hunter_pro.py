@@ -1576,6 +1576,7 @@ AUTOMATION_HINTS = [
 _PF = SOURCES.get("prefilter") or {}
 PREFILTER_ON = bool(_PF.get("enabled", False))
 PREFILTER_KEEP = [str(x).lower() for x in (_PF.get("keep_sources") or [])]
+PREFILTER_NEGATIVE = [str(x).lower() for x in (_PF.get("negative_hints") or [])]
 
 TITLE_EXTRA_HINTS = [
     "ai engineer", "automation engineer", "integration engineer", "market analyst",
@@ -1601,6 +1602,9 @@ def passes_prefilter(lead):
     if any(k in src for k in PREFILTER_KEEP):
         return True
     title = (lead.get("title") or "").lower()
+    body_head = (lead.get("description") or "").lower()[:600]
+    if any(h in title + " " + body_head for h in PREFILTER_NEGATIVE):
+        return False
     if any(h in title for h in TITLE_HINTS + AUTOMATION_HINTS + TITLE_EXTRA_HINTS):
         return True
     body = (lead.get("description") or "").lower()[:4000]

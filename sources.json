@@ -153,6 +153,26 @@
       "n8n Devs",
       "n8n Community"
     ],
-    "_note": "gate = title hints OR narrow body phrases; tuned 2026-11-14 on 7d data: keeps 18%, loses 0 of 35 useful"
+    "_note": "gate = title hints OR narrow body phrases; tuned 2026-11-14 on 7d data: keeps 18%, loses 0 of 35 useful",
+    "negative_hints": [
+      "contractors needed",
+      "contractor needed",
+      "expert needed",
+      "experts needed",
+      "quick project",
+      "quick task",
+      "ongoing project work",
+      "gohighlevel",
+      "go high level",
+      "zapier expert",
+      "make.com expert",
+      "n8n expert",
+      "budget is",
+      "hourly rate",
+      "one-off project",
+      "small project",
+      "test task",
+      "trial task"
+    ]
   }
 }
