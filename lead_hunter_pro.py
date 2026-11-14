@@ -3015,7 +3015,7 @@ Evidence:
 - Built LeadHunter Pro (public GitHub) with an MCP server, evidence-based scoring and Telegram delivery.
 - Built TradeMind Lite: AI trading journal Telegram bot with crypto payments (Plisio).
 - Background covers treasury, settlement, reconciliation, compliance awareness, payments operations, trading support, middle and back office, risk operations.
-- Tech: Python, SQL, Excel, REST APIs, HMAC webhooks, PostgreSQL, SQLite, Docker, nginx, systemd, cron, Linux VPS, Git, Playwright, n8n, LLM integrations, MCP.
+- Tech: Python, SQL, Excel, REST APIs, HMAC webhooks, PostgreSQL, SQLite, Docker, nginx, systemd, cron, Linux VPS, Git, Playwright, n8n (self-hosted, production workflows), LLM integrations, MCP.
 - English fluent professional, Russian native.
 - Links: linkedin.com/in/andrey-mashkin, github.com/impowery/leadhunter, https://luna56.vercel.app.
 - Timezone Bangkok UTC+7, available immediately, remote worldwide.
