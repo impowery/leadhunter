@@ -284,6 +284,13 @@ def lead_fresh(lead, max_days=MAX_LEAD_AGE_DAYS):
     for pat in CLOSED_PATTERNS:
         if re.search(pat, text, re.I):
             return False
+    # ATS boards (Greenhouse, Lever, Ashby) list open roles only, so a job still
+    # present in the feed is open however long ago it was last updated. Dropping
+    # those on age loses long-open senior and ops roles (an Alpaca APAC crypto
+    # ops opening sat 57 days and was never seen). Keep them; the CLOSED_PATTERNS
+    # check above still catches explicitly closed posts.
+    if lead.get("from_ats"):
+        return True
     age = lead.get("posted_at")
     if age is None:
         age = age_ago_epoch(text)
@@ -1486,6 +1493,8 @@ def parse_nodesk():
     raw = fetch_url("https://nodesk.co/remote-jobs/index.xml", timeout=25)
     if not raw:
         return []
+    # Feed contains bare HTML entities (&nbsp;), which XML parsers reject
+    raw = re.sub(r"&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)", "&amp;", raw)
     leads = []
     try:
         import xml.etree.ElementTree as ET
@@ -1716,7 +1725,8 @@ def parse_greenhouse_boards():
                 skipped_loc["gh"] = skipped_loc.get("gh", 0) + 1
                 continue
             lead = {"title": title[:200], "url": url, "location": location[:80],
-                    "source": "Greenhouse " + token, "description": desc[:3000]}
+                    "source": "Greenhouse " + token, "description": desc[:3000],
+                    "from_ats": True}
             posted = parse_lead_date(job.get("updated_at") or job.get("first_published"))
             if posted is not None:
                 lead["posted_at"] = posted
@@ -1762,7 +1772,8 @@ def parse_lever_boards():
                 skipped_loc["lever"] = skipped_loc.get("lever", 0) + 1
                 continue
             lead = {"title": title[:200], "url": url, "location": location.strip()[:80],
-                    "source": "Lever " + token, "description": desc[:3000]}
+                    "source": "Lever " + token, "description": desc[:3000],
+                    "from_ats": True}
             posted = parse_lead_date(str(job.get("createdAt") or ""))
             if posted is not None:
                 lead["posted_at"] = posted
@@ -1812,7 +1823,8 @@ def parse_ashby_boards():
                 skipped_loc["ashby"] = skipped_loc.get("ashby", 0) + 1
                 continue
             lead = {"title": title[:200], "url": url, "location": location[:80],
-                    "source": "Ashby " + token, "description": desc[:3000]}
+                    "source": "Ashby " + token, "description": desc[:3000],
+                    "from_ats": True}
             posted = parse_lead_date(str(job.get("publishedAt") or job.get("updatedAt") or ""))
             if posted is not None:
                 lead["posted_at"] = posted
@@ -2293,7 +2305,9 @@ def send_tg_message(text, reply_markup=None):
         }
         if reply_markup:
             payload["reply_markup"] = reply_markup
-        requests.post(url, json=payload, timeout=10)
+        r = requests.post(url, json=payload, timeout=10)
+        if r.status_code != 200 or not r.json().get("ok"):
+            print(f"  [WARN] TG send rejected ({r.status_code}): {r.text[:200]}", flush=True)
     except Exception as e:
         print(f"  [WARN] TG send failed: {e}")
     for tok, chat in GUEST_BOTS:
@@ -2307,7 +2321,9 @@ def send_tg_message(text, reply_markup=None):
             }
             if reply_markup:
                 payload["reply_markup"] = reply_markup
-            requests.post(url, json=payload, timeout=10)
+            gr = requests.post(url, json=payload, timeout=10)
+            if gr.status_code != 200 or not gr.json().get("ok"):
+                print(f"  [WARN] Guest bot send rejected ({gr.status_code})", flush=True)
         except Exception as e:
             print(f"  [WARN] Guest bot send failed: {e}")
 

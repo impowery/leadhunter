@@ -1,6 +1,6 @@
 {
   "_comment": "Source registry. Edit here, not in code. verified_at = date the board was checked against its API.",
-  "verified_at": "2026-11-14",
+  "verified_at": "2026-11-26",
   "ats_boards": {
     "greenhouse": [
       {
@@ -87,6 +87,71 @@
         "board": "thunes",
         "enabled": true,
         "note": "payments, Manila ops roles"
+      },
+      {
+        "board": "primexbt",
+        "enabled": true,
+        "note": "trading operations specialist, remote"
+      },
+      {
+        "board": "ebanx",
+        "enabled": true,
+        "note": "LatAm payments ops"
+      },
+      {
+        "board": "billcom",
+        "enabled": true,
+        "note": "B2B payments ops"
+      },
+      {
+        "board": "gocardless",
+        "enabled": true,
+        "note": "payments ops"
+      },
+      {
+        "board": "wise",
+        "enabled": true,
+        "note": "payments operations"
+      },
+      {
+        "board": "monzo",
+        "enabled": true,
+        "note": "bank operations"
+      },
+      {
+        "board": "mercury",
+        "enabled": true,
+        "note": "banking operations"
+      },
+      {
+        "board": "sumup",
+        "enabled": true,
+        "note": "payments, large board"
+      },
+      {
+        "board": "brex",
+        "enabled": true,
+        "note": "card and spend ops"
+      },
+      {
+        "board": "woo",
+        "enabled": true,
+        "note": "crypto exchange ops"
+      },
+      {
+        "board": "luno",
+        "enabled": true,
+        "note": "crypto exchange ops"
+      },
+      {
+        "board": "blockchain",
+        "enabled": true,
+        "note": "crypto ops"
+      },
+      {
+        "board": "ripple",
+        "enabled": true,
+        "note": "crypto ops, onsite heavy"
       }
     ],
     "lever": [
@@ -104,6 +169,21 @@
         "board": "ambergroup",
         "enabled": true,
         "note": "0 ops now, keep polling"
+      },
+      {
+        "board": "certik",
+        "enabled": true,
+        "note": "web3 compliance, remote"
+      },
+      {
+        "board": "anchorage",
+        "enabled": true,
+        "note": "crypto custody ops"
+      },
+      {
+        "board": "moonpay",
+        "enabled": true,
+        "note": "crypto payments ops"
       }
     ],
     "ashby": [
