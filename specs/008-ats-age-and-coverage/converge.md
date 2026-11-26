@@ -33,3 +33,41 @@ APAC — та самая вакансия, потерянная по возра�
 ## Побочно вошло в коммит
 Незакоммиченные правки прошлой сессии, уже бывшие в проде: логирование отклонённых
 TG-сообщений (`send_tg_message`), фикс голых HTML-entities в `parse_nodesk`.
+
+## JobStreet/SEEK SEA (26.11, второй проход)
+
+Пользователь попросил азиатские борды, только топовые. Проверены живьём:
+
+| борд | результат |
+|---|---|
+| JobStreet / SEEK (SG, MY, PH, ID) | **API `api/jobsearch/v5/search`, JSON без ключа — используется** |
+| JobStreet / JobsDB **Thailand** | Cloudflare 403 (как прежний `parse_jobsdb`) |
+| MyCareersFuture (SG gov) | API отдаёт JSON, но вакансии только сингапурские |
+| Glints | 401/404, нужен приватный ключ |
+| NodeFlair | 403 |
+| Kalibrr, Foundit, Hiredly, Tech in Asia, JobBKK, JobTopgun | HTML-скрейпинг или мёртвый эндпоинт |
+| SEEK AU-вариант, Wantedly (JP) | JSON, но вне профиля (Япония, японский язык) |
+
+Реализован `parse_seek_asia()`. Конфиг в `sources.json` → `seek_asia` (сайты, ключевые
+слова, `max_per_site`), правится без кода. Берутся только вакансии с
+`workArrangements.id == 3` (Remote); 1 = On-site, 2 = Hybrid.
+
+Важно: города в выдаче — это локация работодателя, а не ограничение работы. Гео-фильтр
+по названию города отбрасывал 100% выдачи, поэтому для Remote-вакансий он не применяется:
+релевантность плюс LLM-скоринг отсеивают остальное.
+
+### Результат боевого прогона (07:43 UTC)
+```
+MY: 2   PH: 8   ID: 2   → 12 лидов
+51763  AML Transaction Monitoring Analyst (HK Blockchain)   JobStreet PH  score 7.7  sent=1
+51765  Finance and Settlements Support Assistant (AU)       JobStreet PH  score 7.3  sent=1
+51771  Settlement Executive (Mandarin Speaker Only)         JobStreet ID  score 6.5  sent=1
+51768  Senior Analyst, Treasury | WFH                       JobStreet PH  score 6.1  sent=-1 (в очереди)
+51770  Compliance Analyst/KYC Officer - FinTech             JobStreet ID  score 5.8
+51766  AU Mortgage Compliance Officer | Perm WFH            JobStreet PH  score 1.0  (отсеян)
+```
+
+Три отправленных лида — больше, чем дали все 16 новых ATS-бордов вместе.
+
+Оговорка: `Settlement Executive` в выдаче помечен «Mandarin Speaker Only». Скоринг дал 6.5,
+но требование языка стоит проверить вручную перед откликом.

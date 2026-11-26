@@ -338,5 +338,45 @@
       "south africa"
     ],
     "_note": "Bangkok/Thailand jobs are kept even onsite: the owner lives there. Otherwise the job must be remote and either region-generic (APAC, Asia, EMEA, worldwide) or name no locked country/city. Remote-London or Remote-Japan is a drop because it implies residency there."
+  },
+  "seek_asia": {
+    "_comment": "JobStreet/SEEK Southeast Asia search API. Only Remote postings kept. th.jobsdb.com is Cloudflare-blocked (403).",
+    "enabled": true,
+    "max_per_site": 8,
+    "sites": [
+      {
+        "country": "SG",
+        "host": "sg.jobstreet.com",
+        "siteKey": "SG-Main",
+        "locale": "en-SG"
+      },
+      {
+        "country": "MY",
+        "host": "my.jobstreet.com",
+        "siteKey": "MY-Main",
+        "locale": "en-MY"
+      },
+      {
+        "country": "PH",
+        "host": "ph.jobstreet.com",
+        "siteKey": "PH-Main",
+        "locale": "en-PH"
+      },
+      {
+        "country": "ID",
+        "host": "id.jobstreet.com",
+        "siteKey": "ID-Main",
+        "locale": "id-ID"
+      }
+    ],
+    "keywords": [
+      "crypto operations",
+      "digital assets operations",
+      "payment operations",
+      "settlement operations",
+      "treasury operations",
+      "kyc crypto",
+      "compliance crypto"
+    ]
   }
 }

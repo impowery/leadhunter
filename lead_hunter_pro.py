@@ -955,6 +955,95 @@ def parse_jobsdb(max_pages=4, fetch_desc=True):
     return leads
 
 
+SEEK_SEA_SITES = [
+    ("SG", "sg.jobstreet.com", "SG-Main", "en-SG"),
+    ("MY", "my.jobstreet.com", "MY-Main", "en-MY"),
+    ("PH", "ph.jobstreet.com", "PH-Main", "en-PH"),
+    ("ID", "id.jobstreet.com", "ID-Main", "id-ID"),
+]
+SEEK_SEA_KEYWORDS = [
+    "crypto operations", "digital assets operations", "payment operations",
+    "settlement operations", "treasury operations", "kyc crypto", "compliance crypto",
+]
+
+
+def parse_seek_asia():
+    """JobStreet (SEEK) Southeast Asia search API.
+
+    JobStreet is the largest board in SEA and answers JSON without a key on
+    /api/jobsearch/v5/search. Only postings marked Remote are kept: every other
+    listing is bound to a city, so passes_location() rejects it anyway. The
+    Thailand sister site (th.jobsdb.com) sits behind Cloudflare and returns 403.
+    """
+    print("[JobStreet SEA] Fetching...", flush=True)
+    leads = []
+    seen = set()
+    headers = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+        "Accept": "application/json",
+    }
+    cfg = SOURCES.get("seek_asia") or {}
+    sites = [(str(s.get("country") or ""), str(s.get("host") or ""),
+              str(s.get("siteKey") or ""), str(s.get("locale") or ""))
+             for s in (cfg.get("sites") or []) if s.get("host")]
+    keywords = [str(k) for k in (cfg.get("keywords") or []) if str(k).strip()]
+    max_per_site = int(cfg.get("max_per_site") or 8)
+    for tag, host, site_key, locale in (sites or SEEK_SEA_SITES):
+        picked = 0
+        for kw in (keywords or SEEK_SEA_KEYWORDS):
+            try:
+                resp = requests.get(
+                    "https://" + host + "/api/jobsearch/v5/search", headers=headers,
+                    params={"siteKey": site_key, "keywords": kw, "page": 1, "locale": locale},
+                    timeout=25)
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+            except Exception as e:
+                print("  [JobStreet " + tag + "] " + str(e)[:70], flush=True)
+                continue
+            for job in data.get("data") or []:
+                jid = str(job.get("id") or "")
+                if not jid or jid in seen:
+                    continue
+                arrangements = ((job.get("workArrangements") or {}).get("data") or [])
+                if not any(str(w.get("id")) == "3" for w in arrangements):
+                    continue  # id 3 = Remote; 1 = On-site, 2 = Hybrid
+                title = (job.get("title") or "").strip()
+                teaser = job.get("teaser") or ""
+                if not title or not _crypto_ops_relevant(teaser, title):
+                    continue
+                # Listing cities are the employer's own location, not a work
+                # restriction: SEEK tags these as Remote, so the geo filter on a
+                # city name would reject every one of them. Remote is enough here;
+                # relevance plus LLM scoring sort out the rest.
+                cities = " ".join(str((loc or {}).get("label") or "")
+                                  for loc in (job.get("locations") or []))
+                seen.add(jid)
+                lead = {
+                    "title": title[:200],
+                    "url": "https://" + host + "/job/" + jid,
+                    "location": ("remote " + cities).strip()[:80],
+                    "source": "JobStreet " + tag,
+                    "description": (teaser + " " + " ".join(
+                        str(x) for x in (job.get("bulletPoints") or [])))[:3000],
+                }
+                posted = parse_lead_date(str(job.get("listingDate") or ""))
+                if posted is not None:
+                    lead["posted_at"] = posted
+                leads.append(lead)
+                picked += 1
+                if picked >= max_per_site:
+                    break
+            if picked >= max_per_site:
+                break
+        if picked:
+            print("  " + tag + ": " + str(picked), flush=True)
+    print("  " + str(len(leads)) + " remote SEA ops jobs", flush=True)
+    return leads
+
+
 def parse_hn_jobs():
     print("[HN] Searching 'Who is hiring' posts via Algolia API...")
     import time as _time
@@ -3653,6 +3742,8 @@ def run():
     all_raw.extend(_maybe("Web3Career", parse_web3career))
     print("[DBG] parse_jobsdb...", flush=True)
     all_raw.extend(parse_jobsdb())
+    print("[DBG] parse_seek_asia...", flush=True)
+    all_raw.extend(parse_seek_asia())
     print("[DBG] parse_solana_getro...", flush=True)
     all_raw.extend(_maybe("Solana", parse_solana_getro))
     print("[DBG] parse_dynamitejobs...", flush=True)
