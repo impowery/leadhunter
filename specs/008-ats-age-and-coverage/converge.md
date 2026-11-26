@@ -71,3 +71,36 @@ MY: 2   PH: 8   ID: 2   → 12 лидов
 
 Оговорка: `Settlement Executive` в выдаче помечен «Mandarin Speaker Only». Скоринг дал 6.5,
 но требование языка стоит проверить вручную перед откликом.
+
+## Языковой фильтр (26.11)
+
+«Такие вакансии не нужны» — вакансии с требованием другого языка отсекаются до скоринга.
+
+`language_blocked(lead)` смотрит заголовок **и** описание (у SEEK-лидов описание часто
+пустое, требование стоит в заголовке). Блокируют только жёсткие формулировки рядом с языком:
+speaker, speaking, fluent, fluency, required, mandatory, essential, only, proficiency, native.
+Мягкие упоминания («Mandarin is a plus», «nice to have», «advantage») пропускаются.
+
+Языки: mandarin, cantonese, japanese, korean, bahasa, vietnamese, thai, indonesian, tagalog,
+turkish, arabic, spanish, portuguese, french, german, dutch, polish, italian.
+Английский и русский — рабочие, не блокируются. `\bthai\b` не цепляет «Thailand».
+
+Проверка на 9 кейсах — все верны:
+```
+blocked  Settlement Executive (Mandarin Speaker Only)
+pass     AML Transaction Monitoring Analyst (HK Blockchain)
+pass     Senior Analyst, Treasury | WFH
+pass     "Knowledge of Mandarin is a plus."
+blocked  Japanese-speaking Client Support
+pass     "Thailand office in Bangkok. Fluent in English required."
+blocked  "Cantonese required for Hong Kong coverage."
+blocked  "Must speak Korean to cover Seoul counterparties."
+pass     "Thai baht settlement experience."
+```
+
+Боевой прогон 08:17 UTC: `[Lang] Dropped 3 leads requiring another language`.
+Прогон по 85 последним лидам в базе: 2 блокировки, обе настоящие —
+`Settlement Executive (Mandarin Speaker Only)` и n8n-вакансия с
+«Professional French skills are mandatory».
+
+Замечание: лид `51771` (Mandarin) уже был отправлен до появления фильтра, откатить нельзя.

@@ -276,6 +276,37 @@ CLOSED_PATTERNS = (
 )
 
 
+_LANG_HARD = re.compile(
+    r"\b(mandarin|cantonese|japanese|korean|bahasa|vietnamese|thai|indonesian|tagalog|"
+    r"turkish|arabic|spanish|portuguese|french|german|dutch|polish|italian)\b"
+    r"[^.;]{0,24}?\b(speaker|speaking|fluent|fluency|required|mandatory|essential|only|"
+    r"proficien\w*|native)\b"
+    r"|\b(fluent|fluency|proficien\w+|native|speaks?)\b[^.;]{0,24}?"
+    r"\b(mandarin|cantonese|japanese|korean|bahasa|vietnamese|thai|indonesian|tagalog|"
+    r"turkish|arabic|spanish|portuguese|french|german|dutch|polish|italian)\b",
+    re.I)
+_LANG_SOFT = re.compile(
+    r"\b(is a plus|nice to have|advantage|advantageous|preferred|bonus|desirable|a plus)\b",
+    re.I)
+
+
+def language_blocked(lead):
+    """Drop postings that require a language other than English or Russian.
+
+    The title is included because boards often put the requirement there and ship
+    an empty description. Soft mentions stay: "Mandarin is a plus" is fine, only
+    hard requirements (speaker, fluent, required, only, native) block a posting.
+    """
+    text = ((lead.get("title") or "") + ". " + (lead.get("description") or ""))[:4000]
+    for sentence in re.split(r"[.;]\s+", text):
+        if not _LANG_HARD.search(sentence):
+            continue
+        if _LANG_SOFT.search(sentence):
+            continue
+        return True
+    return False
+
+
 def lead_fresh(lead, max_days=MAX_LEAD_AGE_DAYS):
     """True if the lead is younger than max_days. Checks posted_at, then
     falls back to textual age markers ('3y ago') inside title/description.
@@ -3759,6 +3790,14 @@ def run():
     dropped_age = before_age - len(all_raw)
     if dropped_age:
         print(f"[Age] Dropped {dropped_age} leads older than {MAX_LEAD_AGE_DAYS} days", flush=True)
+
+    # Language filter: postings demanding Mandarin, Japanese and the like are
+    # useless here no matter how well they score.
+    before_lang = len(all_raw)
+    all_raw = [l for l in all_raw if not language_blocked(l)]
+    dropped_lang = before_lang - len(all_raw)
+    if dropped_lang:
+        print(f"[Lang] Dropped {dropped_lang} leads requiring another language", flush=True)
 
     # Prefilter: drop leads with no ops/automation signal before any LLM call
     if PREFILTER_ON:
